@@ -54,11 +54,21 @@ Product #12 in the Comfybear family. The first 11 projects are the initial tenan
 
 ## Phase roadmap
 
-1. **Phase 0** _(shipped)_ — Landing page, `/api/waitlist` stub (log-only), Vercel-ready.
-2. **Phase 1** — Supabase auth, multi-tenant schema (strict RLS from day 1), Project Hub + onboarding wizard, AI brief analyzer.
-3. **Phase 2** — Campaign Generator, Content Studio, human-approval queue.
-4. **Phase 3** — Social scheduler (Ayrshare), email sequences (Resend), optimal-time AI.
-5. **Phase 4+** — Analytics, agentic loops, white-label / agency mode, billing (Stripe).
+1. **Phase 0** _(shipped, v0.1.0)_ — Landing page, `/api/waitlist` stub (log-only), Vercel-ready.
+2. **Phase 1-A** _(shipped, v0.2.0)_ — Neon Postgres, Drizzle schema, RLS on tenant tables, `withUser()` helper.
+3. **Phase 1-B** _(shipped)_ — Auth.js v5 Google OAuth, `/login`, `/dashboard` empty state, session-aware Nav.
+4. **Phase 1-C** — Magic-link login (Resend), "Plug New Project" wizard, AI brief analyzer.
+5. **Phase 2** — Campaign Generator, Content Studio, human-approval queue.
+6. **Phase 3** — Social scheduler (Ayrshare), email sequences (Resend), optimal-time AI.
+7. **Phase 4+** — Analytics, agentic loops, white-label / agency mode, billing (Stripe).
+
+## Auth pattern
+
+- **Auth.js v5** (`next-auth@beta`) with **Google OAuth** provider and the **Drizzle adapter** pointed at the Phase 1-A tables.
+- Session strategy: **database** — the sessions row is the source of truth; revocable server-side.
+- **No middleware.** Route protection is done via server-component guards (`const s = await auth(); if (!s?.user) redirect("/login")`). Middleware pulls the full adapter into the edge bundle, which breaks because Neon's WebSocket driver needs `ws` (Node-only). Page-level guards are cheap, and we can revisit when we need cross-route routing rules.
+- `trustHost: true` because Vercel preview deploys use ephemeral hostnames that don't match `AUTH_URL`.
+- Auth.js tables are NOT RLS-protected (see Phase 1-A notes) — only the server-side adapter touches them.
 
 ## Hard rules
 
@@ -74,28 +84,52 @@ Product #12 in the Comfybear family. The first 11 projects are the initial tenan
 - Error handling only at real boundaries (user input, external APIs).
 - Keep components small and presentational where possible.
 
-## Current Phase 0 file map
+## File map
 
 ```
 src/
+├── auth.ts                            # Auth.js v5 config (Google + Drizzle adapter)
 ├── app/
-│   ├── layout.tsx                 # Metadata + root shell
-│   ├── page.tsx                   # Composes landing sections
-│   ├── globals.css                # Tailwind v4 + @theme tokens
-│   └── api/waitlist/route.ts      # POST /api/waitlist (log-only stub)
-└── components/
-    ├── Nav.tsx
-    ├── Hero.tsx
-    ├── HowItWorks.tsx
-    ├── Features.tsx
-    ├── Waitlist.tsx               # 'use client' — fetches /api/waitlist
-    └── Footer.tsx
+│   ├── layout.tsx                     # Metadata + root shell
+│   ├── page.tsx                       # Landing page
+│   ├── globals.css                    # Tailwind v4 + @theme tokens
+│   ├── login/page.tsx                 # Google sign-in, redirects if already authed
+│   ├── dashboard/
+│   │   ├── layout.tsx                 # Authed shell (avatar, sign out)
+│   │   └── page.tsx                   # Empty state "Plug your first project"
+│   └── api/
+│       ├── auth/[...nextauth]/route.ts  # Auth.js handler
+│       └── waitlist/route.ts           # POST /api/waitlist (log-only stub)
+├── components/
+│   ├── Nav.tsx                        # Auth-aware landing nav
+│   ├── Hero.tsx                       # Truthful channel visual (no fake data)
+│   ├── HowItWorks.tsx
+│   ├── Features.tsx
+│   ├── Waitlist.tsx                   # 'use client' — fetches /api/waitlist
+│   └── Footer.tsx
+└── lib/db/
+    ├── client.ts                      # Drizzle + Neon + withUser()
+    ├── schema.ts                      # All tables
+    └── migrations/                    # Drizzle-Kit generated + RLS policies
 ```
+
+## Env vars in Vercel
+
+| Name | Source | Used by |
+| --- | --- | --- |
+| `DATABASE_URL` | Neon Vercel integration | Runtime queries |
+| `DATABASE_URL_UNPOOLED` | Neon Vercel integration | Migrations |
+| `AUTH_SECRET` | `openssl rand -base64 32` | Auth.js session signing |
+| `AUTH_URL` | e.g. `https://comfymart.vercel.app` | Auth.js callback base |
+| `AUTH_GOOGLE_ID` | Google Cloud Console OAuth client | Google sign-in |
+| `AUTH_GOOGLE_SECRET` | Google Cloud Console OAuth client | Google sign-in |
+| `RESEND_API_KEY` | Phase 1-C | Magic-link email |
+| `EMAIL_FROM` | Phase 1-C | Sender identity |
 
 ## How to continue
 
-When you pick this up next:
-1. Confirm Vercel is deployed and `comfymart.vercel.app` is live.
-2. Ask the owner which Phase 1 slice to start first (likely auth + project wizard).
-3. Before adding Supabase, set `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in Vercel env vars.
-4. Write RLS policies in the same commit that creates each tenant table.
+1. Confirm the live site: landing at `/`, `/login` shows Google button, `/dashboard` requires auth.
+2. Phase 1-C scope: magic-link login (Resend) + Project wizard + AI brief analyzer.
+3. The wizard creates orgs via the `create_organization()` RPC (see Phase 1-A RLS migration).
+4. All tenant reads/writes MUST go through `withUser(userId, fn)` in `src/lib/db/client.ts`.
+5. When adding new tenant tables: enable RLS + FORCE, add policies using `is_org_member()`.
