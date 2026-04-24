@@ -26,17 +26,31 @@ Product #12 in the Comfybear family. The first 11 projects are the initial tenan
   - `--color-accent: #ff8c5a`
 - Font stack: Inter / system sans.
 
-## Planned integrations (not yet wired)
+## Integrations
 
-| Purpose           | Service              |
-| ----------------- | -------------------- |
-| Auth + DB         | Supabase             |
-| Storage (assets)  | Supabase Storage     |
-| LLM / content     | Anthropic Claude (`claude-sonnet-4-6` by default; `claude-opus-4-7` for heavy reasoning) |
-| Social posting    | Ayrshare (unified)   |
-| Transactional email | Resend             |
-| SMS (later)       | Twilio               |
-| Video (later)     | Runway / Kling AI    |
+| Purpose             | Service                                    | Status  |
+| ------------------- | ------------------------------------------ | ------- |
+| Database            | Neon Postgres (via Vercel integration)     | ✅ wired |
+| ORM / migrations    | Drizzle ORM + Drizzle Kit                  | ✅ wired |
+| Auth                | Auth.js v5 (Drizzle adapter)               | schema only (runtime lands in Option B) |
+| Storage             | Vercel Blob                                | Phase 1-C |
+| LLM / content       | Anthropic Claude (`claude-sonnet-4-6` default; `claude-opus-4-7` for heavy reasoning) | Phase 2 |
+| Social posting      | Ayrshare (unified)                         | Phase 3 |
+| Transactional email | Resend                                     | Phase 1-B (magic links) |
+| SMS (later)         | Twilio                                     | Phase 4+ |
+| Video (later)       | Runway / Kling AI                          | Phase 4+ |
+
+## Multi-tenancy: how it's enforced
+
+**Postgres RLS, not app-layer checks.** Tenant safety is a database invariant.
+
+- Three tables are RLS-protected with `FORCE ROW LEVEL SECURITY`: `organizations`, `memberships`, `projects`. Even the DB owner role is subject to policy.
+- Auth.js tables (`users`, `accounts`, `sessions`, `verification_tokens`) are deliberately NOT RLS-protected — only the trusted server-side Auth.js adapter touches them. RLS there would break login without adding safety.
+- Every policy reads `app_current_user_id()`, which returns `current_setting('app.user_id', true)`.
+- The runtime injects that setting via `withUser(userId, fn)` in `src/lib/db/client.ts` — it runs `fn` inside a transaction after `SELECT set_config('app.user_id', userId, true)`.
+- **Never use the bare `db` export in user-facing code paths.** Only use `db` for Auth.js adapter / server-side admin. User requests must go through `withUser()`.
+- Atomic org creation uses the `create_organization(name, slug)` SECURITY DEFINER function, which creates the org + owner membership in one statement.
+- Helper functions (`is_org_member`, `is_org_owner`) are `SECURITY DEFINER` to bypass their own recursive RLS.
 
 ## Phase roadmap
 
