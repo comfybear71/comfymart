@@ -34,54 +34,31 @@ export default function Hero() {
           </div>
         </div>
 
-        <div className="relative mx-auto mt-16 max-w-4xl">
-          <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 card-shadow md:p-6">
-            <div className="flex items-center gap-1.5 pb-4">
-              <span className="h-2.5 w-2.5 rounded-full bg-[var(--color-muted)]" />
-              <span className="h-2.5 w-2.5 rounded-full bg-[var(--color-muted)]" />
-              <span className="h-2.5 w-2.5 rounded-full bg-[var(--color-muted)]" />
-              <span className="ml-auto text-xs text-[var(--color-muted-foreground)]">
-                comfymart.xyz / dashboard
+        <div className="relative mx-auto mt-16 max-w-3xl">
+          <div className="rounded-3xl border border-[var(--color-border)] bg-gradient-to-br from-[var(--color-card)] to-[var(--color-muted)]/50 p-10 card-shadow md:p-14">
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              {["Social", "Email", "Content", "SEO", "Community"].map((c) => (
+                <span
+                  key={c}
+                  className="rounded-full border border-[var(--color-border)] bg-[var(--color-background)] px-4 py-2 text-sm font-medium"
+                >
+                  {c}
+                </span>
+              ))}
+            </div>
+            <div className="mt-8 flex items-center justify-center">
+              <div className="h-px w-16 bg-[var(--color-border)]" />
+              <span className="mx-3 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-accent)] px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-white">
+                AI
               </span>
+              <div className="h-px w-16 bg-[var(--color-border)]" />
             </div>
-            <div className="grid gap-4 md:grid-cols-3">
-              <MockStat label="Campaigns live" value="7" trend="+2 this week" />
-              <MockStat label="Impressions" value="184k" trend="+38% vs last" />
-              <MockStat label="Signups driven" value="412" trend="+91 today" />
-            </div>
-            <div className="mt-4 rounded-xl bg-[var(--color-muted)] p-4">
-              <p className="text-xs font-medium uppercase tracking-wider text-[var(--color-muted-foreground)]">
-                This week&apos;s AI brief
-              </p>
-              <p className="mt-2 text-sm text-[var(--color-foreground)]">
-                Your launch thread on X outperformed the baseline by 3×. I&apos;ve
-                queued 4 follow-ups in the same format and paused the
-                underperforming LinkedIn variant.
-              </p>
-            </div>
+            <p className="mt-8 text-balance text-center text-xl font-medium md:text-2xl">
+              One brain. Every channel. Always on brand.
+            </p>
           </div>
         </div>
       </div>
     </section>
-  );
-}
-
-function MockStat({
-  label,
-  value,
-  trend,
-}: {
-  label: string;
-  value: string;
-  trend: string;
-}) {
-  return (
-    <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4">
-      <p className="text-xs font-medium uppercase tracking-wider text-[var(--color-muted-foreground)]">
-        {label}
-      </p>
-      <p className="mt-2 text-2xl font-semibold">{value}</p>
-      <p className="mt-1 text-xs text-[var(--color-accent)]">{trend}</p>
-    </div>
   );
 }
