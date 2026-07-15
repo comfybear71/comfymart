@@ -68,11 +68,19 @@ export async function generateShareImage(
 }
 
 function buildPrompt(input: GenerateShareImageInput): string {
+  const hook = input.hook?.trim();
   const parts = [
-    `Commercial lifestyle product photo for social media promoting "${input.projectName}".`,
-    input.hook ? `Brand promise: ${input.hook}.` : null,
-    input.scene ? `Scene: ${input.scene}.` : null,
-    "Photorealistic, clean composition, soft natural light, no text, no logos, no watermarks, Instagram-ready square crop.",
+    `Photorealistic commercial product photo for Instagram (1:1).`,
+    `Brand/product name: "${input.projectName}".`,
+    hook
+      ? `The product is exactly this — show THIS physical product, not a metaphor: ${hook}`
+      : `Show the real physical product associated with "${input.projectName}".`,
+    input.scene
+      ? `Scene: ${input.scene}.`
+      : `Scene: product installed or displayed in a realistic Australian residential outdoor setting, natural daylight.`,
+    `If the product is an outdoor aircon / HVAC cover or shade for a condenser unit: show a reflective top cover fitted on a split-system outdoor air conditioner unit (metal cabinet with fan/vents visible and unobstructed).`,
+    `Do NOT invent fashion items, sun hats, beach bags, sunglasses, or unrelated lifestyle flat-lays unless the product is clothing or fashion.`,
+    `No text, no logos, no watermarks, no brand wordmarks in the image.`,
   ];
   return parts.filter(Boolean).join(" ");
 }

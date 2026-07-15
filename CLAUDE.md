@@ -142,7 +142,7 @@ src/
 ## How to continue
 
 1. On each project page: complete **Social channel setup** (tick networks after linking in Ayrshare).
-2. Keep Free/Premium as one shared Ayrshare profile for Comfybear brands until Launch+ multi-profile.
-3. Phase 3 caveat is closed: social + Markdown download ship without CMS sync. Phase 4 starts with CMS sync + email sequences + per-org `Profile-Key` + video.
+2. Keep **one shared Ayrshare profile** for Comfybear brands (Free/Premium) while there are no external customers. **Ayrshare Launch+ multi-profile is deferred** until multi-tenant clients need isolated social profiles.
+3. Phase 3 caveat is closed: social + Markdown download ship without CMS sync. Phase 4 founder path (no multi-profile yet): **CMS sync** → email sequences → video.
 4. All tenant reads/writes MUST go through `withUser(userId, fn)` in `src/lib/db/client.ts`.
 5. When adding new tenant tables: enable RLS + FORCE, add policies using `is_org_member()`.
