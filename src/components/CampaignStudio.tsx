@@ -15,6 +15,9 @@ export type StudioItem = {
   publishedAt?: string | Date | null;
   publishError?: string | null;
   publishDetail?: string | null;
+  commitSha?: string | null;
+  liveUrl?: string | null;
+  videoUrl?: string | null;
   projectName?: string | null;
   websiteUrl?: string | null;
 };
@@ -49,6 +52,11 @@ async function reviewItems(
   const data = (await res.json().catch(() => ({}))) as {
     error?: string;
     updated?: number;
+    results?: Array<{
+      id: string;
+      status: string;
+      scheduledFor?: string | null;
+    }>;
   };
   if (!res.ok) throw new Error(data.error ?? "Update failed");
   return data;
@@ -73,9 +81,27 @@ async function publishItems(itemIds: string[], mode: "now" | "schedule") {
       mode?: string;
       markdown?: string;
       filename?: string;
+      commitSha?: string;
+      liveUrl?: string;
+      scheduledFor?: string;
     }>;
   };
   if (!res.ok) throw new Error(data.error ?? "Publish failed");
+  return data;
+}
+
+async function generateVideo(itemId: string) {
+  const res = await fetch("/api/campaigns/items/video", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ itemId }),
+  });
+  const data = (await res.json().catch(() => ({}))) as {
+    error?: string;
+    videoUrl?: string;
+    detail?: string;
+  };
+  if (!res.ok) throw new Error(data.error ?? "Video generation failed");
   return data;
 }
 
@@ -140,7 +166,19 @@ export default function CampaignStudio({
     patchItems(ids, { status: decision });
     setBusyIds((s) => new Set([...s, ...ids]));
     try {
-      await reviewItems(ids, decision);
+      const data = await reviewItems(ids, decision);
+      const byId = new Map((data.results ?? []).map((r) => [r.id, r]));
+      setItems((prev) =>
+        prev.map((item) => {
+          const r = byId.get(item.id);
+          if (!r) return item;
+          return {
+            ...item,
+            status: r.status,
+            scheduledFor: r.scheduledFor ?? item.scheduledFor,
+          };
+        }),
+      );
       toast.success(
         ids.length > 1
           ? `${ids.length} ${decision}`
@@ -176,6 +214,9 @@ export default function CampaignStudio({
             status: r.status,
             publishError: r.error ?? null,
             publishDetail: r.detail ?? null,
+            commitSha: r.commitSha ?? item.commitSha ?? null,
+            liveUrl: r.liveUrl ?? item.liveUrl ?? null,
+            scheduledFor: r.scheduledFor ?? item.scheduledFor,
           };
         }),
       );
@@ -191,13 +232,18 @@ export default function CampaignStudio({
             downloadMarkdown(doc.filename, doc.markdown);
           }
         }
+        const cms = data.results?.find((r) => r.commitSha || r.liveUrl);
         const tip = data.results?.find((r) => r.detail)?.detail;
         toast.success(
-          docs.length
-            ? `${data.published ?? ids.length} published — Markdown downloaded for your site`
-            : tip
-              ? `${data.published ?? ids.length} published — ${tip}`
-              : `${data.published ?? ids.length} published`,
+          cms?.liveUrl
+            ? `${data.published ?? ids.length} published — CMS live at ${cms.liveUrl}`
+            : cms?.commitSha
+              ? `${data.published ?? ids.length} published — GitHub ${cms.commitSha.slice(0, 7)}`
+              : docs.length
+                ? `${data.published ?? ids.length} published — Markdown downloaded for your site`
+                : tip
+                  ? `${data.published ?? ids.length} published — ${tip}`
+                  : `${data.published ?? ids.length} published`,
         );
       }
     } catch (err) {
@@ -207,6 +253,26 @@ export default function CampaignStudio({
       setBusyIds((s) => {
         const next = new Set(s);
         ids.forEach((id) => next.delete(id));
+        return next;
+      });
+    }
+  }
+
+  async function makeVideo(itemId: string) {
+    setBusyIds((s) => new Set([...s, itemId]));
+    try {
+      const data = await generateVideo(itemId);
+      patchItems([itemId], {
+        videoUrl: data.videoUrl ?? null,
+        publishDetail: data.detail ?? "Video ready",
+      });
+      toast.success("Video ready");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Video failed");
+    } finally {
+      setBusyIds((s) => {
+        const next = new Set(s);
+        next.delete(itemId);
         return next;
       });
     }
@@ -268,20 +334,20 @@ export default function CampaignStudio({
       </div>
 
       <p className="mb-6 rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-muted)]/40 px-4 py-3 text-xs text-[var(--color-muted-foreground)]">
-        Email → your signed-in address (Resend). Social → Ayrshare networks in{" "}
-        <code className="text-[0.7rem]">AYRSHARE_PLATFORMS</code> with Grok/OG
-        media. SEO &amp; Content → Markdown download — then follow{" "}
+        Email → project notify email or your account (Resend cron for sequences).
+        Social → Ayrshare + Grok/OG media. SEO &amp; Content → GitHub CMS when
+        configured, plus Markdown download.{" "}
         {projectId ? (
           <a
-            href={`/dashboard/projects/${projectId}#seo-publish`}
+            href={`/dashboard/projects/${projectId}#site-cms`}
             className="text-[var(--color-primary)] hover:underline"
           >
-            Put SEO on your website
+            Site CMS setup
           </a>
         ) : (
-          "Put SEO on your website"
+          "Site CMS setup"
         )}{" "}
-        on the project page (channel checklist is there too).
+        · TikTok stays off until video is reliable.
       </p>
 
       {items.length === 0 ? (
@@ -335,6 +401,41 @@ export default function CampaignStudio({
                         {item.publishDetail}
                       </p>
                     )}
+                    {(item.commitSha || item.liveUrl) && (
+                      <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                        {item.commitSha && (
+                          <span>
+                            SHA{" "}
+                            <code className="text-[0.7rem]">
+                              {item.commitSha.slice(0, 7)}
+                            </code>
+                          </span>
+                        )}
+                        {item.commitSha && item.liveUrl ? " · " : null}
+                        {item.liveUrl && (
+                          <a
+                            href={item.liveUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[var(--color-primary)] hover:underline"
+                          >
+                            {item.liveUrl}
+                          </a>
+                        )}
+                      </p>
+                    )}
+                    {item.videoUrl && (
+                      <p className="mt-2">
+                        <a
+                          href={item.videoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-[var(--color-primary)] hover:underline"
+                        >
+                          Open / download video
+                        </a>
+                      </p>
+                    )}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {item.status === "pending_approval" && (
@@ -376,6 +477,16 @@ export default function CampaignStudio({
                           Publish
                         </button>
                       </>
+                    )}
+                    {item.channel === "content" && (
+                      <button
+                        type="button"
+                        disabled={busy || bulkBusy}
+                        onClick={() => makeVideo(item.id)}
+                        className="rounded-full border border-[var(--color-border)] px-4 py-1.5 text-xs font-medium transition hover:bg-[var(--color-muted)] disabled:opacity-60"
+                      >
+                        {busy ? "Generating…" : item.videoUrl ? "Regen video" : "Generate video"}
+                      </button>
                     )}
                     {(item.channel === "seo" || item.channel === "content") &&
                       (item.status === "published" ||

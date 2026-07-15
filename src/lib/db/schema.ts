@@ -112,6 +112,15 @@ export const projects = pgTable(
     description: text("description"),
     websiteUrl: text("website_url"),
     brandTone: jsonb("brand_tone"),
+    /** GitHub CMS sync (Phase 4) — provider id, e.g. "github". */
+    cmsProvider: text("cms_provider"),
+    /** owner/repo, e.g. comfybear71/shademate */
+    cmsRepo: text("cms_repo"),
+    cmsBranch: text("cms_branch"),
+    /** Markdown guides folder, e.g. content/guides */
+    cmsGuidesPath: text("cms_guides_path"),
+    /** Optional recipient for scheduled campaign emails. */
+    notifyEmail: text("notify_email"),
     createdBy: text("created_by")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),

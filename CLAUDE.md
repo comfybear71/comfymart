@@ -33,12 +33,13 @@ Product #12 in the Comfybear family. The first 11 projects are the initial tenan
 | Database            | Neon Postgres (via Vercel integration)     | ✅ wired |
 | ORM / migrations    | Drizzle ORM + Drizzle Kit                  | ✅ wired |
 | Auth                | Auth.js v5 (Drizzle adapter)               | ✅ Google + Resend magic link |
-| Storage             | Vercel Blob                                | ✅ Grok share images |
-| LLM / content       | Anthropic Claude + xAI Grok Imagine        | ✅ brief, campaigns, social media |
+| Storage             | Vercel Blob                                | ✅ Grok share images + video |
+| LLM / content       | Anthropic Claude + xAI Grok Imagine        | ✅ brief, campaigns, social media, video |
 | Social posting      | Ayrshare (unified)                         | ✅ Phase 3 (single profile) |
-| Transactional email | Resend                                     | ✅ magic links + campaign email |
-| SMS (later)         | Twilio                                     | Phase 4+ |
-| Video (later)       | Runway / Kling AI                          | Phase 4+ |
+| Transactional email | Resend                                     | ✅ magic links + campaign email + sequences |
+| CMS sync            | GitHub Contents API                        | ✅ Phase 4 founder path |
+| SMS (later)         | Twilio                                     | later |
+| Video               | xAI Grok Imagine Video                     | ✅ Phase 4 founder path |
 
 ## Multi-tenancy: how it's enforced
 
@@ -60,13 +61,14 @@ Product #12 in the Comfybear family. The first 11 projects are the initial tenan
 4. **Phase 1-C** _(shipped)_ — Magic-link login (Resend), "Plug New Project" wizard, AI brief analyzer.
 5. **Phase 2** _(shipped)_ — Campaign Generator, Content Studio, human-approval queue.
 6. **Phase 3** _(shipped core)_ — Ayrshare social (+ Grok media), Resend email, schedule heuristics, SEO/Content Markdown export, per-network channel setup checklist on project page.
-7. **Phase 4+** — **CMS sync** (push approved SEO/Content to customer site / headless CMS / Git), email sequences, Ayrshare multi-profile per tenant, analytics, agentic loops, white-label / agency mode, billing (Stripe), video.
+7. **Phase 4 founder path** _(in progress)_ — GitHub CMS sync for SEO/Content, email sequences via cron + `dayOffset`/`scheduledFor`, Grok Imagine video on Content items. Still later: Ayrshare multi-profile, analytics, agentic loops, white-label / agency mode, billing (Stripe).
 
-### Phase 3 vs CMS sync (do not block)
+### Phase 4 CMS sync (founder)
 
-- Phase 3 is **done** when: human-approved social posts with media go out via Ayrshare, email works via Resend, and SEO/Content can be **downloaded as Markdown** with setup instructions for WordPress/Shopify/custom.
-- **CMS sync is Phase 4+.** Do not delay social/setup polish waiting for auto-push to Next.js/WordPress.
-- Until sync exists: WordPress/Shopify users paste `.md`; Next.js owners (e.g. ShadeMate) add `/guides` pages by hand (or with an agent). Treat sync like channel setup when built: destination URL, auth, “done when article is live.”
+- Project fields: `cmsProvider`, `cmsRepo`, `cmsBranch`, `cmsGuidesPath`, `notifyEmail`.
+- Auth: server env `CMS_GITHUB_TOKEN` (fine-grained PAT with Contents read/write).
+- On SEO/Content publish: commit `{cmsGuidesPath}/{slug}.md` + `src/app/guides/{slug}/page.tsx`; best-effort guides index + sitemap patch. **Download .md always remains.**
+- Studio shows commit SHA + predicted live URL (`websiteUrl/guides/{slug}`).
 
 ## Auth pattern
 
@@ -135,14 +137,19 @@ src/
 | `AYRSHARE_API_KEY` | Ayrshare dashboard | Live social publish (dry-run without it) |
 | `AYRSHARE_PROFILE_KEY` | Ayrshare (optional) | Multi-profile / business plans |
 | `AYRSHARE_PLATFORMS` | e.g. `linkedin,facebook,instagram` | Default social targets |
-| `XAI_API_KEY` | xAI console | Grok Imagine share images |
+| `XAI_API_KEY` | xAI console | Grok Imagine share images + video |
 | `XAI_IMAGE_MODEL` | e.g. `grok-imagine-image-quality` | Image model (default `grok-imagine-image`) |
-| `BLOB_READ_WRITE_TOKEN` | Vercel Blob | Durable image URLs for scheduled posts |
+| `XAI_VIDEO_MODEL` | e.g. `grok-imagine-video` or `grok-imagine-video-1.5` | Video model (default `grok-imagine-video`) |
+| `XAI_VIDEO_DURATION` | e.g. `8` | Clip length seconds (5–15, default 8) |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob | Durable image/video URLs for scheduled posts |
+| `CMS_GITHUB_TOKEN` | GitHub fine-grained PAT | Push SEO/Content Markdown + guide pages to customer repos |
+| `CRON_SECRET` | `openssl rand -base64 32` | Authorize `/api/cron/send-emails` (Vercel Cron sends Bearer) |
 
 ## How to continue
 
-1. On each project page: complete **Social channel setup** (tick networks after linking in Ayrshare).
-2. Keep Free/Premium as one shared Ayrshare profile for Comfybear brands until Launch+ multi-profile.
-3. Phase 3 caveat is closed: social + Markdown download ship without CMS sync. Phase 4 starts with CMS sync + email sequences + per-org `Profile-Key` + video.
-4. All tenant reads/writes MUST go through `withUser(userId, fn)` in `src/lib/db/client.ts`.
-5. When adding new tenant tables: enable RLS + FORCE, add policies using `is_org_member()`.
+1. On each project page: complete **Social channel setup** and **Site CMS** (repo/branch/path + test connection).
+2. Keep Free/Premium as one shared Ayrshare profile for Comfybear brands until Launch+ multi-profile. **Do not add TikTok** to `AYRSHARE_PLATFORMS` until video is reliable.
+3. Run migration `0004_phase4_cms` (`npm run db:migrate`) after deploy; set `CMS_GITHUB_TOKEN`, `CRON_SECRET`, and optional `XAI_VIDEO_*`.
+4. Email sequences reuse `campaign_items` (`channel=email` + `scheduledFor`); cron every 15m sends approved/scheduled due mail via Resend to `notifyEmail` or the campaign creator's user email.
+5. All tenant reads/writes MUST go through `withUser(userId, fn)` in `src/lib/db/client.ts` (cron uses `due_scheduled_email_items()` SECURITY DEFINER to list, then `withUser(created_by)` to update).
+6. When adding new tenant tables: enable RLS + FORCE, add policies using `is_org_member()`.

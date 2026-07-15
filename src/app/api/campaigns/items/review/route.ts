@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { withUser } from "@/lib/db/client";
 import { campaignItems } from "@/lib/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
+import { suggestSendAt } from "@/lib/publish/optimal-time";
 
 export const runtime = "nodejs";
 
@@ -46,6 +47,9 @@ export async function POST(request: Request) {
         .select({
           id: campaignItems.id,
           status: campaignItems.status,
+          channel: campaignItems.channel,
+          dayOffset: campaignItems.dayOffset,
+          scheduledFor: campaignItems.scheduledFor,
           campaignId: campaignItems.campaignId,
         })
         .from(campaignItems)
@@ -55,30 +59,73 @@ export async function POST(request: Request) {
         throw new Error("No items found.");
       }
 
-      const pendingIds = rows
-        .filter((r) => r.status === "pending_approval")
-        .map((r) => r.id);
-
-      if (pendingIds.length === 0) {
-        return { count: 0, campaignId: rows[0].campaignId };
+      const pending = rows.filter((r) => r.status === "pending_approval");
+      if (pending.length === 0) {
+        return {
+          count: 0,
+          campaignId: rows[0].campaignId,
+          results: [] as Array<{
+            id: string;
+            status: string;
+            scheduledFor?: string | null;
+          }>,
+        };
       }
 
-      await tx
-        .update(campaignItems)
-        .set({
-          status: decision,
-          reviewedAt: new Date(),
-          reviewedBy: userId,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            inArray(campaignItems.id, pendingIds),
-            eq(campaignItems.status, "pending_approval"),
-          ),
-        );
+      const now = new Date();
+      const results: Array<{
+        id: string;
+        status: string;
+        scheduledFor?: string | null;
+      }> = [];
 
-      return { count: pendingIds.length, campaignId: rows[0].campaignId };
+      for (const row of pending) {
+        const patch: {
+          status: Decision | "scheduled";
+          reviewedAt: Date;
+          reviewedBy: string;
+          updatedAt: Date;
+          scheduledFor?: Date | null;
+        } = {
+          status: decision,
+          reviewedAt: now,
+          reviewedBy: userId,
+          updatedAt: now,
+        };
+
+        // Email sequences: on approve, set scheduledFor from dayOffset when missing.
+        if (decision === "approved" && row.channel === "email" && !row.scheduledFor) {
+          const when = suggestSendAt({
+            dayOffset: row.dayOffset,
+            channel: "email",
+          });
+          // If the suggested time is still in the future, queue for cron.
+          if (when.getTime() > Date.now() + 60_000) {
+            patch.status = "scheduled";
+            patch.scheduledFor = when;
+          } else {
+            patch.scheduledFor = when;
+          }
+        }
+
+        await tx
+          .update(campaignItems)
+          .set(patch)
+          .where(
+            and(
+              eq(campaignItems.id, row.id),
+              eq(campaignItems.status, "pending_approval"),
+            ),
+          );
+
+        results.push({
+          id: row.id,
+          status: patch.status,
+          scheduledFor: patch.scheduledFor?.toISOString() ?? null,
+        });
+      }
+
+      return { count: pending.length, campaignId: rows[0].campaignId, results };
     });
 
     return NextResponse.json({
@@ -87,6 +134,7 @@ export async function POST(request: Request) {
       campaignId: updated.campaignId,
       decision,
       itemIds,
+      results: updated.results,
     });
   } catch (err) {
     console.error("[api/campaigns/items/review]", err);

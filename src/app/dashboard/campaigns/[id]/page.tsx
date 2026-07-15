@@ -45,6 +45,7 @@ export default async function CampaignStudioPage({
         scheduledFor: campaignItems.scheduledFor,
         publishedAt: campaignItems.publishedAt,
         publishError: campaignItems.publishError,
+        metadata: campaignItems.metadata,
       })
       .from(campaignItems)
       .where(eq(campaignItems.campaignId, id))
@@ -56,6 +57,31 @@ export default async function CampaignStudioPage({
   if (!data) notFound();
 
   const { campaign, items } = data;
+
+  const studioItems = items.map((item) => {
+    const meta =
+      item.metadata && typeof item.metadata === "object"
+        ? (item.metadata as Record<string, unknown>)
+        : {};
+    return {
+      id: item.id,
+      channel: item.channel,
+      title: item.title,
+      body: item.body,
+      dayOffset: item.dayOffset,
+      status: item.status,
+      scheduledFor: item.scheduledFor,
+      publishedAt: item.publishedAt,
+      publishError: item.publishError,
+      publishDetail:
+        typeof meta.publishDetail === "string" ? meta.publishDetail : null,
+      commitSha: typeof meta.commitSha === "string" ? meta.commitSha : null,
+      liveUrl: typeof meta.liveUrl === "string" ? meta.liveUrl : null,
+      videoUrl: typeof meta.videoUrl === "string" ? meta.videoUrl : null,
+      projectName: campaign.projectName,
+      websiteUrl: campaign.websiteUrl,
+    };
+  });
 
   return (
     <div>
@@ -75,7 +101,7 @@ export default async function CampaignStudioPage({
       </div>
 
       <CampaignStudio
-        initialItems={items}
+        initialItems={studioItems}
         projectId={campaign.projectId}
         projectName={campaign.projectName}
         websiteUrl={campaign.websiteUrl}

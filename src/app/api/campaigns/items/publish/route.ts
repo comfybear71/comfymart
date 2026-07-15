@@ -71,7 +71,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "itemId(s) required." }, { status: 400 });
   }
 
-  const toEmail = session.user?.email;
+  const sessionEmail = session.user?.email;
 
   try {
     const rows = await withUser(userId, async (tx) => {
@@ -80,6 +80,11 @@ export async function POST(request: Request) {
           item: campaignItems,
           websiteUrl: projects.websiteUrl,
           projectName: projects.name,
+          cmsProvider: projects.cmsProvider,
+          cmsRepo: projects.cmsRepo,
+          cmsBranch: projects.cmsBranch,
+          cmsGuidesPath: projects.cmsGuidesPath,
+          notifyEmail: projects.notifyEmail,
         })
         .from(campaignItems)
         .innerJoin(campaigns, eq(campaigns.id, campaignItems.campaignId))
@@ -131,6 +136,8 @@ export async function POST(request: Request) {
       scheduledFor?: string;
       markdown?: string;
       filename?: string;
+      commitSha?: string;
+      liveUrl?: string;
     }> = [];
 
     for (const row of rows) {
@@ -146,8 +153,32 @@ export async function POST(request: Request) {
         item.metadata,
       );
       const socialBody = cleanSocialCopy(item.body);
+      const toEmail =
+        (row.notifyEmail?.trim() || sessionEmail?.trim() || null) ?? null;
 
       if (mode === "schedule" && when.getTime() > Date.now() + 60_000) {
+        // Email sequences: store schedule only; cron sends when due.
+        if (item.channel === "email") {
+          await withUser(userId, async (tx) => {
+            await tx
+              .update(campaignItems)
+              .set({
+                status: "scheduled",
+                scheduledFor: when,
+                publishError: null,
+                updatedAt: new Date(),
+              })
+              .where(eq(campaignItems.id, item.id));
+          });
+          results.push({
+            id: item.id,
+            status: "scheduled",
+            detail: `Email sequence scheduled for ${when.toLocaleString()} → ${toEmail ?? "no recipient yet"}`,
+            scheduledFor: when.toISOString(),
+          });
+          continue;
+        }
+
         await withUser(userId, async (tx) => {
           await tx
             .update(campaignItems)
@@ -216,13 +247,15 @@ export async function POST(request: Request) {
       let outcome: Awaited<ReturnType<typeof publishEmailItem>> & {
         markdown?: string;
         filename?: string;
+        commitSha?: string;
+        liveUrl?: string;
       };
       if (item.channel === "email") {
         if (!toEmail) {
           outcome = {
             ok: false,
             mode: "live",
-            error: "No email on your account to send to.",
+            error: "No notifyEmail on the project or email on your account.",
           };
         } else {
           outcome = await publishEmailItem({
@@ -238,12 +271,20 @@ export async function POST(request: Request) {
           mediaUrls,
         });
       } else {
-        outcome = publishDocumentItem({
+        outcome = await publishDocumentItem({
           channel: item.channel,
           title: item.title,
           body: item.body,
           projectName: row.projectName,
           websiteUrl: row.websiteUrl,
+          cms: {
+            cmsProvider: row.cmsProvider,
+            cmsRepo: row.cmsRepo,
+            cmsBranch: row.cmsBranch,
+            cmsGuidesPath: row.cmsGuidesPath,
+            websiteUrl: row.websiteUrl,
+            projectName: row.projectName,
+          },
         });
       }
 
@@ -282,6 +323,8 @@ export async function POST(request: Request) {
               ...(outcome.filename
                 ? { documentFilename: outcome.filename }
                 : {}),
+              ...(outcome.commitSha ? { commitSha: outcome.commitSha } : {}),
+              ...(outcome.liveUrl ? { liveUrl: outcome.liveUrl } : {}),
             }),
             updatedAt: new Date(),
           })
@@ -296,6 +339,8 @@ export async function POST(request: Request) {
         ...(outcome.markdown && outcome.filename
           ? { markdown: outcome.markdown, filename: outcome.filename }
           : {}),
+        ...(outcome.commitSha ? { commitSha: outcome.commitSha } : {}),
+        ...(outcome.liveUrl ? { liveUrl: outcome.liveUrl } : {}),
       });
     }
 

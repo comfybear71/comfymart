@@ -7,7 +7,9 @@ import { eq, desc } from "drizzle-orm";
 import type { BrandBrief } from "@/lib/ai/brief";
 import GenerateCampaignButton from "@/components/GenerateCampaignButton";
 import ChannelSetupGuide from "@/components/ChannelSetupGuide";
+import CmsSetupGuide from "@/components/CmsSetupGuide";
 import SeoPublishGuide from "@/components/SeoPublishGuide";
+import { hasCmsGithubToken } from "@/lib/cms/github";
 
 export default async function ProjectPage({
   params,
@@ -114,6 +116,20 @@ export default async function ProjectPage({
         projectName={project.name}
         websiteUrl={project.websiteUrl}
         brief={brief}
+      />
+
+      <CmsSetupGuide
+        projectId={project.id}
+        projectName={project.name}
+        websiteUrl={project.websiteUrl}
+        initial={{
+          cmsProvider: project.cmsProvider ?? "github",
+          cmsRepo: project.cmsRepo ?? "",
+          cmsBranch: project.cmsBranch ?? "master",
+          cmsGuidesPath: project.cmsGuidesPath ?? "content/guides",
+          notifyEmail: project.notifyEmail ?? "",
+          tokenConfigured: hasCmsGithubToken(),
+        }}
       />
 
       <SeoPublishGuide

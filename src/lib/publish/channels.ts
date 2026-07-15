@@ -192,21 +192,71 @@ export async function publishSocialItem(input: {
 }
 
 import { buildDocumentMarkdown } from "@/lib/publish/document";
+import {
+  projectHasCmsConfig,
+  pushDocumentToGithub,
+  type CmsProjectConfig,
+} from "@/lib/cms/publish";
 
 export type DocumentPublishResult = PublishResult & {
   markdown?: string;
   filename?: string;
+  commitSha?: string;
+  liveUrl?: string;
+  markdownPath?: string;
+  pagePath?: string;
 };
 
-/** SEO / Content: package as Markdown for the site CMS (no auto-push yet). */
-export function publishDocumentItem(input: {
+/** SEO / Content: Markdown download + optional GitHub CMS push. */
+export async function publishDocumentItem(input: {
   channel: string;
   title: string;
   body: string;
   projectName?: string;
   websiteUrl?: string | null;
-}): DocumentPublishResult {
+  cms?: CmsProjectConfig | null;
+}): Promise<DocumentPublishResult> {
   const { markdown, filename } = buildDocumentMarkdown(input);
+  const cmsConfig: CmsProjectConfig = {
+    ...(input.cms ?? {}),
+    projectName: input.projectName ?? input.cms?.projectName,
+    websiteUrl: input.websiteUrl ?? input.cms?.websiteUrl,
+  };
+
+  if (projectHasCmsConfig(cmsConfig)) {
+    const cms = await pushDocumentToGithub({
+      channel: input.channel,
+      title: input.title,
+      body: input.body,
+      project: cmsConfig,
+    });
+
+    if (cms.pushed) {
+      return {
+        ok: true,
+        mode: "live",
+        externalId: cms.commitSha,
+        detail: cms.detail,
+        markdown,
+        filename,
+        commitSha: cms.commitSha,
+        liveUrl: cms.liveUrl,
+        markdownPath: cms.markdownPath,
+        pagePath: cms.pagePath,
+      };
+    }
+
+    return {
+      ok: true,
+      mode: "internal",
+      detail: cms.error
+        ? `${cms.detail} (${cms.error})`
+        : `${cms.detail} Packaged as ${filename}.`,
+      markdown,
+      filename,
+      error: cms.error,
+    };
+  }
 
   return {
     ok: true,
