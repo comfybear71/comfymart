@@ -76,6 +76,7 @@ export default async function CampaignStudioPage({
       publishDetail:
         typeof meta.publishDetail === "string" ? meta.publishDetail : null,
       commitSha: typeof meta.commitSha === "string" ? meta.commitSha : null,
+      prUrl: typeof meta.prUrl === "string" ? meta.prUrl : null,
       liveUrl: typeof meta.liveUrl === "string" ? meta.liveUrl : null,
       videoUrl: typeof meta.videoUrl === "string" ? meta.videoUrl : null,
       projectName: campaign.projectName,

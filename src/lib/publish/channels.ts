@@ -202,6 +202,7 @@ export type DocumentPublishResult = PublishResult & {
   markdown?: string;
   filename?: string;
   commitSha?: string;
+  prUrl?: string;
   liveUrl?: string;
   markdownPath?: string;
   pagePath?: string;
@@ -223,7 +224,24 @@ export async function publishDocumentItem(input: {
     websiteUrl: input.websiteUrl ?? input.cms?.websiteUrl,
   };
 
-  if (projectHasCmsConfig(cmsConfig)) {
+  const wantsCms =
+    Boolean(cmsConfig.cmsRepo?.trim()) &&
+    (cmsConfig.cmsProvider === "github" || !cmsConfig.cmsProvider);
+
+  // Repo saved on the project → GitHub push is required (not a silent download).
+  if (wantsCms) {
+    if (!projectHasCmsConfig(cmsConfig)) {
+      return {
+        ok: false,
+        mode: "live",
+        detail: "CMS repo is set but CMS_GITHUB_TOKEN is missing on the server.",
+        error:
+          "CMS_GITHUB_TOKEN not set — save token in .env.local / Vercel, then republish.",
+        markdown,
+        filename,
+      };
+    }
+
     const cms = await pushDocumentToGithub({
       channel: input.channel,
       title: input.title,
@@ -240,6 +258,7 @@ export async function publishDocumentItem(input: {
         markdown,
         filename,
         commitSha: cms.commitSha,
+        prUrl: cms.prUrl,
         liveUrl: cms.liveUrl,
         markdownPath: cms.markdownPath,
         pagePath: cms.pagePath,
@@ -247,21 +266,19 @@ export async function publishDocumentItem(input: {
     }
 
     return {
-      ok: true,
-      mode: "internal",
-      detail: cms.error
-        ? `${cms.detail} (${cms.error})`
-        : `${cms.detail} Packaged as ${filename}.`,
+      ok: false,
+      mode: "live",
+      detail: cms.detail,
+      error: cms.error ?? cms.detail,
       markdown,
       filename,
-      error: cms.error,
     };
   }
 
   return {
     ok: true,
     mode: "internal",
-    detail: `${input.channel} packaged as ${filename} — download and publish to your site CMS.`,
+    detail: `${input.channel} packaged as ${filename} — no CMS repo saved on this project (Site CMS → Save), so download only.`,
     markdown,
     filename,
   };

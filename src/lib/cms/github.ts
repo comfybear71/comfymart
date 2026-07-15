@@ -160,3 +160,68 @@ export async function putFile(input: {
     htmlUrl: res.data.content?.html_url,
   };
 }
+
+/** Resolve the tip SHA of a branch (e.g. master). */
+export async function getBranchSha(
+  owner: string,
+  repo: string,
+  branch: string,
+): Promise<string> {
+  const res = await gh<{ object?: { sha?: string } }>(
+    `/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`,
+  );
+  if (!res.ok || !res.data.object?.sha) {
+    throw new Error(res.error ?? `Could not resolve branch ${branch}`);
+  }
+  return res.data.object.sha;
+}
+
+/** Create a short-lived branch from `fromSha` (tip of base branch). */
+export async function createBranch(input: {
+  owner: string;
+  repo: string;
+  branch: string;
+  fromSha: string;
+}): Promise<void> {
+  const res = await gh<{ ref?: string }>(`/repos/${input.owner}/${input.repo}/git/refs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ref: `refs/heads/${input.branch}`,
+      sha: input.fromSha,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(res.error ?? `Failed to create branch ${input.branch}`);
+  }
+}
+
+export async function createPullRequest(input: {
+  owner: string;
+  repo: string;
+  title: string;
+  body: string;
+  head: string;
+  base: string;
+}): Promise<{ number: number; htmlUrl: string }> {
+  const res = await gh<{ number?: number; html_url?: string }>(
+    `/repos/${input.owner}/${input.repo}/pulls`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: input.title,
+        body: input.body,
+        head: input.head,
+        base: input.base,
+      }),
+    },
+  );
+  if (!res.ok || !res.data.html_url) {
+    throw new Error(res.error ?? "Failed to open pull request");
+  }
+  return {
+    number: res.data.number ?? 0,
+    htmlUrl: res.data.html_url,
+  };
+}

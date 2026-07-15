@@ -1,5 +1,8 @@
 import { buildDocumentMarkdown } from "@/lib/publish/document";
 import {
+  createBranch,
+  createPullRequest,
+  getBranchSha,
   getFileContent,
   hasCmsGithubToken,
   parseRepo,
@@ -24,6 +27,7 @@ export type CmsProjectConfig = {
 export type CmsPublishResult = {
   pushed: boolean;
   commitSha?: string;
+  prUrl?: string;
   liveUrl?: string;
   markdownPath?: string;
   pagePath?: string;
@@ -44,6 +48,11 @@ function slugFromTitle(title: string, channel: string): string {
 function normalizeGuidesPath(raw?: string | null): string {
   const p = (raw?.trim() || "content/guides").replace(/^\/+|\/+$/g, "");
   return p || "content/guides";
+}
+
+function workBranchName(slug: string): string {
+  const short = Date.now().toString(36);
+  return `comfymart/guide-${slug}-${short}`.slice(0, 100);
 }
 
 export function projectHasCmsConfig(project: CmsProjectConfig): boolean {
@@ -76,12 +85,7 @@ export async function pushDocumentToGithub(input: {
     return { pushed: false, detail: "Invalid cmsRepo.", error: "Invalid cmsRepo" };
   }
 
-  const ref: GitHubRepoRef = {
-    owner: parsed.owner,
-    repo: parsed.repo,
-    branch: input.project.cmsBranch?.trim() || "master",
-  };
-
+  const baseBranch = input.project.cmsBranch?.trim() || "master";
   const slug = slugFromTitle(input.title, input.channel);
   const guidesPath = normalizeGuidesPath(input.project.cmsGuidesPath);
   const mdPath = `${guidesPath}/${slug}.md`;
@@ -94,8 +98,32 @@ export async function pushDocumentToGithub(input: {
     websiteUrl: input.project.websiteUrl,
   });
 
+  const base = (input.project.websiteUrl ?? "").replace(/\/$/, "");
+  const liveUrl = base ? `${base}/guides/${slug}` : undefined;
+
   try {
-    const existingMd = await getFileContent(ref, mdPath);
+    // Read existing files from the protected base branch, then commit onto a PR branch.
+    const baseRef: GitHubRepoRef = {
+      owner: parsed.owner,
+      repo: parsed.repo,
+      branch: baseBranch,
+    };
+    const tipSha = await getBranchSha(parsed.owner, parsed.repo, baseBranch);
+    const headBranch = workBranchName(slug);
+    await createBranch({
+      owner: parsed.owner,
+      repo: parsed.repo,
+      branch: headBranch,
+      fromSha: tipSha,
+    });
+
+    const ref: GitHubRepoRef = {
+      owner: parsed.owner,
+      repo: parsed.repo,
+      branch: headBranch,
+    };
+
+    const existingMd = await getFileContent(baseRef, mdPath);
     const mdResult = await putFile({
       ref,
       path: mdPath,
@@ -109,7 +137,7 @@ export async function pushDocumentToGithub(input: {
       slug,
       markdownRelativeImport: mdPath,
     });
-    const existingPage = await getFileContent(ref, pagePath);
+    const existingPage = await getFileContent(baseRef, pagePath);
     await putFile({
       ref,
       path: pagePath,
@@ -118,14 +146,14 @@ export async function pushDocumentToGithub(input: {
       sha: existingPage?.sha,
     });
 
-    // Best-effort index + sitemap patches
+    // Best-effort index + sitemap patches (read from base, write to head)
     for (const indexPath of [
       "src/app/guides/page.tsx",
       "src/app/guides/index.tsx",
       "content/guides/index.md",
     ]) {
       try {
-        const idx = await getFileContent(ref, indexPath);
+        const idx = await getFileContent(baseRef, indexPath);
         if (!idx) continue;
         const patched = patchGuidesIndex(idx.content, {
           slug,
@@ -149,7 +177,7 @@ export async function pushDocumentToGithub(input: {
     if (input.project.websiteUrl) {
       for (const sitemapPath of ["public/sitemap.xml", "sitemap.xml"]) {
         try {
-          const sm = await getFileContent(ref, sitemapPath);
+          const sm = await getFileContent(baseRef, sitemapPath);
           if (!sm) continue;
           const patched = patchSitemapXml(sm.content, {
             websiteUrl: input.project.websiteUrl,
@@ -171,20 +199,42 @@ export async function pushDocumentToGithub(input: {
       }
     }
 
-    const base = (input.project.websiteUrl ?? "").replace(/\/$/, "");
-    const liveUrl = base ? `${base}/guides/${slug}` : undefined;
+    const pr = await createPullRequest({
+      owner: parsed.owner,
+      repo: parsed.repo,
+      head: headBranch,
+      base: baseBranch,
+      title: `ComfyMart guide: ${input.title}`,
+      body: [
+        `Guide published by **ComfyMart**.`,
+        ``,
+        `- **Slug:** \`${slug}\``,
+        `- **Markdown:** \`${mdPath}\``,
+        `- **Page:** \`${pagePath}\``,
+        liveUrl ? `- **Live URL (after merge):** ${liveUrl}` : null,
+        ``,
+        `Merge this PR to deploy the guide.`,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    });
+
+    const shaShort = mdResult.sha.slice(0, 7);
+    const detail = liveUrl
+      ? `Opened PR — merge to go live at ${liveUrl}. ${pr.htmlUrl}`
+      : `Opened PR (${shaShort}) — merge to publish. ${pr.htmlUrl}`;
 
     return {
       pushed: true,
       commitSha: mdResult.sha,
+      prUrl: pr.htmlUrl,
       liveUrl,
       markdownPath: mdPath,
       pagePath,
-      detail: liveUrl
-        ? `Committed to GitHub (${mdResult.sha.slice(0, 7)}) — live at ${liveUrl}`
-        : `Committed to GitHub (${mdResult.sha.slice(0, 7)}) — ${mdPath}`,
+      detail,
     };
   } catch (err) {
+    console.error("[cms/publish]", err);
     return {
       pushed: false,
       detail: "GitHub push failed — Markdown download still available.",

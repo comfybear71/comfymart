@@ -92,7 +92,13 @@ export async function POST(request: Request) {
         .where(
           and(
             inArray(campaignItems.id, itemIds),
-            inArray(campaignItems.status, ["approved", "failed", "scheduled"]),
+            inArray(campaignItems.status, [
+              "approved",
+              "failed",
+              "scheduled",
+              // Allow SEO/Content republish after a download-only "success"
+              "published",
+            ]),
           ),
         );
     });
@@ -137,11 +143,27 @@ export async function POST(request: Request) {
       markdown?: string;
       filename?: string;
       commitSha?: string;
+      prUrl?: string;
       liveUrl?: string;
     }> = [];
 
     for (const row of rows) {
       const item = row.item;
+
+      // Published social/email must not be re-sent; SEO/Content may retry CMS push.
+      if (
+        item.status === "published" &&
+        item.channel !== "seo" &&
+        item.channel !== "content"
+      ) {
+        results.push({
+          id: item.id,
+          status: "published",
+          detail: "Already published",
+        });
+        continue;
+      }
+
       const when = suggestSendAt({
         dayOffset: item.dayOffset,
         channel: item.channel,
@@ -248,6 +270,7 @@ export async function POST(request: Request) {
         markdown?: string;
         filename?: string;
         commitSha?: string;
+        prUrl?: string;
         liveUrl?: string;
       };
       if (item.channel === "email") {
@@ -295,6 +318,10 @@ export async function POST(request: Request) {
             .set({
               status: "failed",
               publishError: outcome.error ?? "Publish failed",
+              metadata: mergeMeta(item.metadata, {
+                publishMode: outcome.mode,
+                publishDetail: outcome.detail ?? outcome.error ?? null,
+              }),
               updatedAt: new Date(),
             })
             .where(eq(campaignItems.id, item.id));
@@ -303,6 +330,10 @@ export async function POST(request: Request) {
           id: item.id,
           status: "failed",
           error: outcome.error,
+          detail: outcome.detail,
+          ...(outcome.markdown && outcome.filename
+            ? { markdown: outcome.markdown, filename: outcome.filename }
+            : {}),
         });
         continue;
       }
@@ -324,6 +355,7 @@ export async function POST(request: Request) {
                 ? { documentFilename: outcome.filename }
                 : {}),
               ...(outcome.commitSha ? { commitSha: outcome.commitSha } : {}),
+              ...(outcome.prUrl ? { prUrl: outcome.prUrl } : {}),
               ...(outcome.liveUrl ? { liveUrl: outcome.liveUrl } : {}),
             }),
             updatedAt: new Date(),
@@ -340,6 +372,7 @@ export async function POST(request: Request) {
           ? { markdown: outcome.markdown, filename: outcome.filename }
           : {}),
         ...(outcome.commitSha ? { commitSha: outcome.commitSha } : {}),
+        ...(outcome.prUrl ? { prUrl: outcome.prUrl } : {}),
         ...(outcome.liveUrl ? { liveUrl: outcome.liveUrl } : {}),
       });
     }

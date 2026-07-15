@@ -16,6 +16,7 @@ export type StudioItem = {
   publishError?: string | null;
   publishDetail?: string | null;
   commitSha?: string | null;
+  prUrl?: string | null;
   liveUrl?: string | null;
   videoUrl?: string | null;
   projectName?: string | null;
@@ -82,6 +83,7 @@ async function publishItems(itemIds: string[], mode: "now" | "schedule") {
       markdown?: string;
       filename?: string;
       commitSha?: string;
+      prUrl?: string;
       liveUrl?: string;
       scheduledFor?: string;
     }>;
@@ -137,7 +139,15 @@ export default function CampaignStudio({
   const approvedIds = useMemo(
     () =>
       items
-        .filter((i) => i.status === "approved" || i.status === "failed")
+        .filter(
+          (i) =>
+            i.status === "approved" ||
+            i.status === "failed" ||
+            // Republish SEO/Content when prior publish was download-only
+            ((i.channel === "seo" || i.channel === "content") &&
+              i.status === "published" &&
+              !i.commitSha),
+        )
         .map((i) => i.id),
     [items],
   );
@@ -215,6 +225,7 @@ export default function CampaignStudio({
             publishError: r.error ?? null,
             publishDetail: r.detail ?? null,
             commitSha: r.commitSha ?? item.commitSha ?? null,
+            prUrl: r.prUrl ?? item.prUrl ?? null,
             liveUrl: r.liveUrl ?? item.liveUrl ?? null,
             scheduledFor: r.scheduledFor ?? item.scheduledFor,
           };
@@ -222,7 +233,18 @@ export default function CampaignStudio({
       );
 
       if (data.failed) {
-        toast.error(`${data.failed} failed — check item errors`);
+        const fail = data.results?.find((r) => r.status === "failed");
+        // Still offer .md on CMS push failure so content isn't lost.
+        for (const doc of data.results ?? []) {
+          if (doc.status === "failed" && doc.markdown && doc.filename) {
+            downloadMarkdown(doc.filename, doc.markdown);
+          }
+        }
+        toast.error(
+          fail?.error || fail?.detail
+            ? `${data.failed} failed — ${fail.error ?? fail.detail}`
+            : `${data.failed} failed — check item errors`,
+        );
       } else if (mode === "schedule") {
         toast.success(`${data.scheduled ?? ids.length} scheduled`);
       } else {
@@ -232,18 +254,22 @@ export default function CampaignStudio({
             downloadMarkdown(doc.filename, doc.markdown);
           }
         }
-        const cms = data.results?.find((r) => r.commitSha || r.liveUrl);
+        const cms = data.results?.find(
+          (r) => r.prUrl || r.commitSha || r.liveUrl,
+        );
         const tip = data.results?.find((r) => r.detail)?.detail;
         toast.success(
-          cms?.liveUrl
-            ? `${data.published ?? ids.length} published — CMS live at ${cms.liveUrl}`
-            : cms?.commitSha
-              ? `${data.published ?? ids.length} published — GitHub ${cms.commitSha.slice(0, 7)}`
-              : docs.length
-                ? `${data.published ?? ids.length} published — Markdown downloaded for your site`
-                : tip
-                  ? `${data.published ?? ids.length} published — ${tip}`
-                  : `${data.published ?? ids.length} published`,
+          cms?.prUrl
+            ? `${data.published ?? ids.length} published — merge PR: ${cms.prUrl}`
+            : cms?.liveUrl
+              ? `${data.published ?? ids.length} published — CMS live at ${cms.liveUrl}`
+              : cms?.commitSha
+                ? `${data.published ?? ids.length} published — GitHub ${cms.commitSha.slice(0, 7)}`
+                : docs.length
+                  ? `${data.published ?? ids.length} published — Markdown downloaded (no CMS repo saved)`
+                  : tip
+                    ? `${data.published ?? ids.length} published — ${tip}`
+                    : `${data.published ?? ids.length} published`,
         );
       }
     } catch (err) {
@@ -401,7 +427,7 @@ export default function CampaignStudio({
                         {item.publishDetail}
                       </p>
                     )}
-                    {(item.commitSha || item.liveUrl) && (
+                    {(item.commitSha || item.prUrl || item.liveUrl) && (
                       <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
                         {item.commitSha && (
                           <span>
@@ -411,7 +437,20 @@ export default function CampaignStudio({
                             </code>
                           </span>
                         )}
-                        {item.commitSha && item.liveUrl ? " · " : null}
+                        {item.commitSha && (item.prUrl || item.liveUrl)
+                          ? " · "
+                          : null}
+                        {item.prUrl && (
+                          <a
+                            href={item.prUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[var(--color-primary)] hover:underline"
+                          >
+                            Open PR to merge
+                          </a>
+                        )}
+                        {item.prUrl && item.liveUrl ? " · " : null}
                         {item.liveUrl && (
                           <a
                             href={item.liveUrl}
@@ -458,7 +497,11 @@ export default function CampaignStudio({
                         </button>
                       </>
                     )}
-                    {(item.status === "approved" || item.status === "failed") && (
+                    {(item.status === "approved" ||
+                      item.status === "failed" ||
+                      ((item.channel === "seo" || item.channel === "content") &&
+                        item.status === "published" &&
+                        !item.commitSha)) && (
                       <>
                         <button
                           type="button"
@@ -474,7 +517,9 @@ export default function CampaignStudio({
                           onClick={() => publish([item.id], "now")}
                           className="rounded-full bg-[var(--color-foreground)] px-4 py-1.5 text-xs font-medium text-[var(--color-background)] transition hover:opacity-90 disabled:opacity-60"
                         >
-                          Publish
+                          {item.status === "published" && !item.commitSha
+                            ? "Push to CMS"
+                            : "Publish"}
                         </button>
                       </>
                     )}
