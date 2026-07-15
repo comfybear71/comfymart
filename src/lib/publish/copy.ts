@@ -11,8 +11,8 @@ export function cleanSocialCopy(body: string): string {
       const t = line.trim();
       if (!t) return true;
       if (drop.test(t)) return false;
-      if /^\(.*approval.*\)$/i.test(t)) return false;
-      if /^ready for approval/i.test(t)) return false;
+      if (/^\(.*approval.*\)$/i.test(t)) return false;
+      if (/^ready for approval/i.test(t)) return false;
       return true;
     });
 
