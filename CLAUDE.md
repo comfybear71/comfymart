@@ -58,8 +58,8 @@ Product #12 in the Comfybear family. The first 11 projects are the initial tenan
 2. **Phase 1-A** _(shipped, v0.2.0)_ — Neon Postgres, Drizzle schema, RLS on tenant tables, `withUser()` helper.
 3. **Phase 1-B** _(shipped)_ — Auth.js v5 Google OAuth, `/login`, `/dashboard` empty state, session-aware Nav.
 4. **Phase 1-C** _(shipped)_ — Magic-link login (Resend), "Plug New Project" wizard, AI brief analyzer.
-5. **Phase 2** — Campaign Generator, Content Studio, human-approval queue.
-6. **Phase 3** — Social scheduler (Ayrshare), email sequences (Resend), optimal-time AI.
+5. **Phase 2** _(shipped on branch)_ — Campaign Generator, Content Studio, human-approval queue.
+6. **Phase 3** _(in progress)_ — Social scheduler (Ayrshare), email sequences (Resend), optimal-time AI.
 7. **Phase 4+** — Analytics, agentic loops, white-label / agency mode, billing (Stripe).
 
 ## Auth pattern
@@ -125,7 +125,10 @@ src/
 | `AUTH_GOOGLE_SECRET` | Google Cloud Console OAuth client | Google sign-in |
 | `RESEND_API_KEY` | Resend dashboard | Magic-link email (`AUTH_RESEND_KEY` also accepted) |
 | `EMAIL_FROM` | e.g. `ComfyMart <noreply@comfymart.xyz>` | Sender identity |
-| `ANTHROPIC_API_KEY` | Anthropic console | AI brief analyzer (heuristic fallback if unset) |
+| `ANTHROPIC_API_KEY` | Anthropic console | AI brief + campaign generator |
+| `AYRSHARE_API_KEY` | Ayrshare dashboard | Live social publish (dry-run without it) |
+| `AYRSHARE_PROFILE_KEY` | Ayrshare (optional) | Multi-profile / business plans |
+| `AYRSHARE_PLATFORMS` | e.g. `linkedin,facebook` | Default social targets |
 
 ## How to continue
 
