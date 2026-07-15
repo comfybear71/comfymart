@@ -102,18 +102,29 @@ export async function POST(request: Request) {
     brief,
   });
 
+  const { resolveProjectMediaUrls } = await import("@/lib/publish/media");
+  const mediaUrls = await resolveProjectMediaUrls(project.websiteUrl);
+
   try {
     await withUser(userId, async (tx) => {
       await tx.insert(campaignItems).values(
-        plan.items.map((item) => ({
-          campaignId,
-          channel: item.channel,
-          title: item.title,
-          body: item.body,
-          dayOffset: item.dayOffset,
-          status: "pending_approval" as const,
-          metadata: item.metadata ?? null,
-        })),
+        plan.items.map((item) => {
+          const needsMedia =
+            item.channel === "social" || item.channel === "community";
+          const metadata = {
+            ...(item.metadata ?? {}),
+            ...(needsMedia && mediaUrls.length ? { mediaUrls } : {}),
+          };
+          return {
+            campaignId,
+            channel: item.channel,
+            title: item.title,
+            body: item.body,
+            dayOffset: item.dayOffset,
+            status: "pending_approval" as const,
+            metadata: Object.keys(metadata).length ? metadata : null,
+          };
+        }),
       );
 
       await tx

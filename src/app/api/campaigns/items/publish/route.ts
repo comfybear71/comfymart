@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withUser } from "@/lib/db/client";
-import { campaignItems } from "@/lib/db/schema";
+import { campaignItems, campaigns, projects } from "@/lib/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { suggestSendAt } from "@/lib/publish/optimal-time";
 import {
@@ -9,11 +9,41 @@ import {
   publishSocialItem,
   publishInternalItem,
 } from "@/lib/publish/channels";
+import { cleanSocialCopy } from "@/lib/publish/copy";
+import {
+  mediaFromMetadata,
+  resolveProjectMediaUrls,
+} from "@/lib/publish/media";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 type Mode = "now" | "schedule";
+
+/** Prefer env multi-network list; fall back to item metadata platform. */
+function resolvePlatforms(metadata: unknown): string[] | undefined {
+  const fromEnv = process.env.AYRSHARE_PLATFORMS?.split(",")
+    .map((p) => p.trim().toLowerCase())
+    .filter(Boolean);
+  if (fromEnv?.length) return fromEnv;
+
+  if (!metadata || typeof metadata !== "object") return undefined;
+  const platform = (metadata as { platform?: unknown }).platform;
+  if (typeof platform === "string" && platform.trim()) {
+    const p = platform.trim().toLowerCase();
+    if (p === "x") return ["twitter"];
+    return [p];
+  }
+  return undefined;
+}
+
+function mergeMeta(existing: unknown, extra: Record<string, unknown>) {
+  const base =
+    existing && typeof existing === "object"
+      ? (existing as Record<string, unknown>)
+      : {};
+  return { ...base, ...extra };
+}
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -42,15 +72,18 @@ export async function POST(request: Request) {
   }
 
   const toEmail = session.user?.email;
-  if (!toEmail && itemIds.length) {
-    // email channel needs an address; checked per-item below
-  }
 
   try {
     const rows = await withUser(userId, async (tx) => {
       return tx
-        .select()
+        .select({
+          item: campaignItems,
+          websiteUrl: projects.websiteUrl,
+          projectName: projects.name,
+        })
         .from(campaignItems)
+        .innerJoin(campaigns, eq(campaigns.id, campaignItems.campaignId))
+        .innerJoin(projects, eq(projects.id, campaigns.projectId))
         .where(
           and(
             inArray(campaignItems.id, itemIds),
@@ -66,6 +99,18 @@ export async function POST(request: Request) {
       );
     }
 
+    // Cache OG media per project website for this request
+    const mediaCache = new Map<string, string[]>();
+    async function mediaFor(websiteUrl: string | null, metadata: unknown) {
+      const fromMeta = mediaFromMetadata(metadata);
+      if (fromMeta.length) return fromMeta;
+      const key = websiteUrl ?? "";
+      if (!mediaCache.has(key)) {
+        mediaCache.set(key, await resolveProjectMediaUrls(websiteUrl));
+      }
+      return mediaCache.get(key) ?? [];
+    }
+
     const results: Array<{
       id: string;
       status: string;
@@ -75,11 +120,15 @@ export async function POST(request: Request) {
       scheduledFor?: string;
     }> = [];
 
-    for (const item of rows) {
+    for (const row of rows) {
+      const item = row.item;
       const when = suggestSendAt({
         dayOffset: item.dayOffset,
         channel: item.channel,
       });
+      const platforms = resolvePlatforms(item.metadata);
+      const mediaUrls = await mediaFor(row.websiteUrl, item.metadata);
+      const socialBody = cleanSocialCopy(item.body);
 
       if (mode === "schedule" && when.getTime() > Date.now() + 60_000) {
         await withUser(userId, async (tx) => {
@@ -94,12 +143,15 @@ export async function POST(request: Request) {
             .where(eq(campaignItems.id, item.id));
         });
 
-        // Live social schedule via Ayrshare when key present
-        if (item.channel === "social" && process.env.AYRSHARE_API_KEY) {
+        if (
+          (item.channel === "social" || item.channel === "community") &&
+          process.env.AYRSHARE_API_KEY
+        ) {
           const social = await publishSocialItem({
-            body: item.body,
+            body: socialBody,
             scheduleDate: when,
-            platforms: metaPlatforms(item.metadata),
+            platforms,
+            mediaUrls,
           });
           if (!social.ok) {
             await withUser(userId, async (tx) => {
@@ -127,6 +179,7 @@ export async function POST(request: Request) {
                 metadata: mergeMeta(item.metadata, {
                   publishMode: social.mode,
                   publishDetail: social.detail,
+                  mediaUrls,
                 }),
                 updatedAt: new Date(),
               })
@@ -143,7 +196,6 @@ export async function POST(request: Request) {
         continue;
       }
 
-      // Publish now
       let outcome;
       if (item.channel === "email") {
         if (!toEmail) {
@@ -161,8 +213,9 @@ export async function POST(request: Request) {
         }
       } else if (item.channel === "social" || item.channel === "community") {
         outcome = await publishSocialItem({
-          body: item.body,
-          platforms: metaPlatforms(item.metadata),
+          body: socialBody,
+          platforms,
+          mediaUrls,
         });
       } else {
         outcome = await publishInternalItem({
@@ -202,6 +255,7 @@ export async function POST(request: Request) {
             metadata: mergeMeta(item.metadata, {
               publishMode: outcome.mode,
               publishDetail: outcome.detail,
+              mediaUrls,
             }),
             updatedAt: new Date(),
           })
@@ -237,24 +291,4 @@ export async function POST(request: Request) {
       { status: 500 },
     );
   }
-}
-
-function metaPlatforms(metadata: unknown): string[] | undefined {
-  if (!metadata || typeof metadata !== "object") return undefined;
-  const platform = (metadata as { platform?: unknown }).platform;
-  if (typeof platform === "string" && platform.trim()) {
-    const p = platform.trim().toLowerCase();
-    // Ayrshare uses "twitter" for X
-    if (p === "x") return ["twitter"];
-    return [p];
-  }
-  return undefined;
-}
-
-function mergeMeta(existing: unknown, extra: Record<string, unknown>) {
-  const base =
-    existing && typeof existing === "object"
-      ? (existing as Record<string, unknown>)
-      : {};
-  return { ...base, ...extra };
 }

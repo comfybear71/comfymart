@@ -239,9 +239,11 @@ export default function CampaignStudio({
       </div>
 
       <p className="mb-6 rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-muted)]/40 px-4 py-3 text-xs text-[var(--color-muted-foreground)]">
-        Email sends to your signed-in address via Resend. Social uses Ayrshare when{" "}
-        <code className="text-[0.7rem]">AYRSHARE_API_KEY</code> is set; otherwise
-        dry-run publish. Content/SEO are marked ready internally.
+        Email sends to your signed-in address via Resend. Social posts use your
+        project&apos;s site image (OG) so Instagram/Facebook/LinkedIn (and X when
+        linked) can go out together. Set{" "}
+        <code className="text-[0.7rem]">AYRSHARE_PLATFORMS</code> e.g.{" "}
+        <code className="text-[0.7rem]">linkedin,facebook,instagram</code>.
       </p>
 
       {items.length === 0 ? (
