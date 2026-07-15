@@ -5,10 +5,10 @@ import { redirect } from "next/navigation";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; error?: string }>;
 }) {
   const session = await auth();
-  const { next } = await searchParams;
+  const { next, error } = await searchParams;
 
   if (session?.user) {
     redirect(next ?? "/dashboard");
@@ -37,6 +37,15 @@ export default async function LoginPage({
           Sign in to plug a project in and launch its campaign.
         </p>
 
+        {error && (
+          <p
+            role="alert"
+            className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-center text-sm text-red-700"
+          >
+            Sign-in failed. Try again or use another method.
+          </p>
+        )}
+
         <form
           action={async () => {
             "use server";
@@ -53,8 +62,48 @@ export default async function LoginPage({
           </button>
         </form>
 
-        <p className="mt-8 text-center text-xs text-[var(--color-muted-foreground)]">
-          More sign-in options (magic link, GitHub) coming in the next release.
+        <div className="my-6 flex items-center gap-3">
+          <div className="h-px flex-1 bg-[var(--color-border)]" />
+          <span className="text-xs text-[var(--color-muted-foreground)]">
+            or
+          </span>
+          <div className="h-px flex-1 bg-[var(--color-border)]" />
+        </div>
+
+        <form
+          action={async (formData) => {
+            "use server";
+            const email = String(formData.get("email") ?? "").trim();
+            if (!email) return;
+            await signIn("resend", {
+              email,
+              redirectTo,
+            });
+          }}
+          className="space-y-3"
+        >
+          <label className="block text-left text-sm font-medium" htmlFor="email">
+            Email magic link
+          </label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            placeholder="you@yourproject.com"
+            className="w-full rounded-full border border-[var(--color-border)] bg-[var(--color-background)] px-5 py-3 text-sm outline-none transition focus:border-[var(--color-primary)]"
+          />
+          <button
+            type="submit"
+            className="w-full rounded-full bg-[var(--color-foreground)] px-5 py-3 text-sm font-medium text-[var(--color-background)] transition hover:opacity-90"
+          >
+            Email me a link
+          </button>
+        </form>
+
+        <p className="mt-6 text-center text-xs text-[var(--color-muted-foreground)]">
+          We&apos;ll email a one-time sign-in link. No password needed.
         </p>
       </div>
     </main>

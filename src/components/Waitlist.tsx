@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 
 type Status = "idle" | "loading" | "success" | "error";
 
@@ -12,6 +13,7 @@ export default function Waitlist() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setStatus("loading");
+    setMessage("");
     try {
       const res = await fetch("/api/waitlist", {
         method: "POST",
@@ -20,16 +22,21 @@ export default function Waitlist() {
       });
       const data = await res.json();
       if (!res.ok) {
+        const err = data.error ?? "Something went wrong. Try again.";
         setStatus("error");
-        setMessage(data.error ?? "Something went wrong. Try again.");
+        setMessage(err);
+        toast.error(err);
         return;
       }
       setStatus("success");
       setMessage("You're in. We'll be in touch.");
+      toast.success("You're on the waitlist. We'll be in touch.");
       setEmail("");
     } catch {
+      const err = "Network error. Try again.";
       setStatus("error");
-      setMessage("Network error. Try again.");
+      setMessage(err);
+      toast.error(err);
     }
   }
 
@@ -59,6 +66,7 @@ export default function Waitlist() {
             placeholder="you@yourproject.com"
             className="flex-1 rounded-full border border-[var(--color-border)] bg-[var(--color-card)] px-5 py-3 text-sm outline-none transition focus:border-[var(--color-primary)]"
             disabled={status === "loading"}
+            aria-describedby={message ? "waitlist-status" : undefined}
           />
           <button
             type="submit"
@@ -71,6 +79,7 @@ export default function Waitlist() {
 
         {message && (
           <p
+            id="waitlist-status"
             role="status"
             className={`mt-4 text-sm ${
               status === "error"
