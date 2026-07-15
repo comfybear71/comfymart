@@ -124,10 +124,89 @@ export const projects = pgTable(
   ],
 );
 
+export const campaignStatus = pgEnum("campaign_status", [
+  "draft",
+  "generating",
+  "ready",
+  "archived",
+]);
+
+export const campaignItemStatus = pgEnum("campaign_item_status", [
+  "draft",
+  "pending_approval",
+  "approved",
+  "rejected",
+  "scheduled",
+  "published",
+  "failed",
+]);
+
+export const campaignChannel = pgEnum("campaign_channel", [
+  "social",
+  "email",
+  "content",
+  "seo",
+  "community",
+]);
+
+export const campaigns = pgTable(
+  "campaigns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    playbook: text("playbook").notNull().default("startup_launch"),
+    status: campaignStatus("status").notNull().default("draft"),
+    briefSnapshot: jsonb("brief_snapshot"),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("campaigns_project_idx").on(t.projectId)],
+);
+
+export const campaignItems = pgTable(
+  "campaign_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    channel: campaignChannel("channel").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    dayOffset: integer("day_offset").notNull().default(0),
+    status: campaignItemStatus("status").notNull().default("pending_approval"),
+    metadata: jsonb("metadata"),
+    scheduledFor: timestamp("scheduled_for", { mode: "date" }),
+    publishedAt: timestamp("published_at", { mode: "date" }),
+    publishError: text("publish_error"),
+    externalId: text("external_id"),
+    reviewedAt: timestamp("reviewed_at", { mode: "date" }),
+    reviewedBy: text("reviewed_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("campaign_items_campaign_idx").on(t.campaignId),
+    index("campaign_items_status_idx").on(t.status),
+  ],
+);
+
 export type User = typeof users.$inferSelect;
 export type Organization = typeof organizations.$inferSelect;
 export type Membership = typeof memberships.$inferSelect;
 export type Project = typeof projects.$inferSelect;
+export type Campaign = typeof campaigns.$inferSelect;
+export type CampaignItem = typeof campaignItems.$inferSelect;
 export type NewOrganization = typeof organizations.$inferInsert;
 export type NewMembership = typeof memberships.$inferInsert;
 export type NewProject = typeof projects.$inferInsert;
+export type NewCampaign = typeof campaigns.$inferInsert;
+export type NewCampaignItem = typeof campaignItems.$inferInsert;

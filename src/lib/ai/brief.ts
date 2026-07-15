@@ -52,7 +52,11 @@ export async function analyzeBrief(input: BriefInput): Promise<BrandBrief> {
 
   try {
     const Anthropic = (await import("@anthropic-ai/sdk")).default;
-    const client = new Anthropic({ apiKey });
+    const client = new Anthropic({
+      apiKey,
+      timeout: 30_000,
+      maxRetries: 1,
+    });
     const model =
       process.env.ANTHROPIC_MODEL?.trim() || "claude-sonnet-4-6";
 
@@ -76,8 +80,10 @@ Extra notes: ${input.notes || "(none)"}`;
     });
 
     const text = message.content
-      .filter((b) => b.type === "text")
-      .map((b) => ("text" in b ? b.text : ""))
+      .filter((b: { type: string }) => b.type === "text")
+      .map((b: { type: string; text?: string }) =>
+        "text" in b ? (b.text ?? "") : "",
+      )
       .join("")
       .trim();
 
