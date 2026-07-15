@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { auth, signOut } from "@/auth";
+import { redirect } from "next/navigation";
 
 export default async function DashboardLayout({
   children,
@@ -8,7 +9,8 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const session = await auth();
-  const user = session?.user;
+  if (!session?.user) redirect("/login?next=/dashboard");
+  const user = session.user;
 
   return (
     <div className="min-h-screen bg-[var(--color-muted)]/30">

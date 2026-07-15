@@ -34,9 +34,9 @@ Product #12 in the Comfybear family. The first 11 projects are the initial tenan
 | ORM / migrations    | Drizzle ORM + Drizzle Kit                  | ✅ wired |
 | Auth                | Auth.js v5 (Drizzle adapter)               | schema only (runtime lands in Option B) |
 | Storage             | Vercel Blob                                | Phase 1-C |
-| LLM / content       | Anthropic Claude (`claude-sonnet-4-6` default; `claude-opus-4-7` for heavy reasoning) | Phase 2 |
+| LLM / content       | Anthropic Claude (`claude-sonnet-4-6` default; `claude-opus-4-7` for heavy reasoning) | Phase 1-C brief (needs `ANTHROPIC_API_KEY`) / Phase 2 campaigns |
 | Social posting      | Ayrshare (unified)                         | Phase 3 |
-| Transactional email | Resend                                     | Phase 1-B (magic links) |
+| Transactional email | Resend                                     | ✅ Phase 1-C (magic links) |
 | SMS (later)         | Twilio                                     | Phase 4+ |
 | Video (later)       | Runway / Kling AI                          | Phase 4+ |
 
@@ -57,14 +57,14 @@ Product #12 in the Comfybear family. The first 11 projects are the initial tenan
 1. **Phase 0** _(shipped, v0.1.0)_ — Landing page, `/api/waitlist` stub (log-only), Vercel-ready.
 2. **Phase 1-A** _(shipped, v0.2.0)_ — Neon Postgres, Drizzle schema, RLS on tenant tables, `withUser()` helper.
 3. **Phase 1-B** _(shipped)_ — Auth.js v5 Google OAuth, `/login`, `/dashboard` empty state, session-aware Nav.
-4. **Phase 1-C** — Magic-link login (Resend), "Plug New Project" wizard, AI brief analyzer.
+4. **Phase 1-C** _(shipped)_ — Magic-link login (Resend), "Plug New Project" wizard, AI brief analyzer.
 5. **Phase 2** — Campaign Generator, Content Studio, human-approval queue.
 6. **Phase 3** — Social scheduler (Ayrshare), email sequences (Resend), optimal-time AI.
 7. **Phase 4+** — Analytics, agentic loops, white-label / agency mode, billing (Stripe).
 
 ## Auth pattern
 
-- **Auth.js v5** (`next-auth@beta`) with **Google OAuth** provider and the **Drizzle adapter** pointed at the Phase 1-A tables.
+- **Auth.js v5** (`next-auth@beta`) with **Google OAuth** + **Resend magic link**, and the **Drizzle adapter** pointed at the Phase 1-A tables.
 - Session strategy: **database** — the sessions row is the source of truth; revocable server-side.
 - **No middleware.** Route protection is done via server-component guards (`const s = await auth(); if (!s?.user) redirect("/login")`). Middleware pulls the full adapter into the edge bundle, which breaks because Neon's WebSocket driver needs `ws` (Node-only). Page-level guards are cheap, and we can revisit when we need cross-route routing rules.
 - `trustHost: true` because Vercel preview deploys use ephemeral hostnames that don't match `AUTH_URL`.
@@ -123,13 +123,14 @@ src/
 | `AUTH_URL` | e.g. `https://comfymart.vercel.app` | Auth.js callback base |
 | `AUTH_GOOGLE_ID` | Google Cloud Console OAuth client | Google sign-in |
 | `AUTH_GOOGLE_SECRET` | Google Cloud Console OAuth client | Google sign-in |
-| `RESEND_API_KEY` | Phase 1-C | Magic-link email |
-| `EMAIL_FROM` | Phase 1-C | Sender identity |
+| `RESEND_API_KEY` | Resend dashboard | Magic-link email (`AUTH_RESEND_KEY` also accepted) |
+| `EMAIL_FROM` | e.g. `ComfyMart <noreply@comfymart.xyz>` | Sender identity |
+| `ANTHROPIC_API_KEY` | Anthropic console | AI brief analyzer (heuristic fallback if unset) |
 
 ## How to continue
 
-1. Confirm the live site: landing at `/`, `/login` shows Google button, `/dashboard` requires auth.
-2. Phase 1-C scope: magic-link login (Resend) + Project wizard + AI brief analyzer.
+1. Confirm: `/login` has Google + magic link; `/dashboard/projects/new` creates org+project+brief.
+2. Phase 2 scope: Campaign Generator, Content Studio, human-approval queue.
 3. The wizard creates orgs via the `create_organization()` RPC (see Phase 1-A RLS migration).
 4. All tenant reads/writes MUST go through `withUser(userId, fn)` in `src/lib/db/client.ts`.
 5. When adding new tenant tables: enable RLS + FORCE, add policies using `is_org_member()`.

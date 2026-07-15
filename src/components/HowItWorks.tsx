@@ -1,18 +1,28 @@
-const steps = [
+import { Plug, BookOpen, Armchair, type LucideIcon } from "lucide-react";
+
+const steps: {
+  n: string;
+  title: string;
+  body: string;
+  icon: LucideIcon;
+}[] = [
   {
     n: "01",
     title: "Plug your project in",
     body: "Drop your URL, a short description, and any assets. The AI learns your brand voice, personas, and USPs in under a minute.",
+    icon: Plug,
   },
   {
     n: "02",
     title: "Pick a playbook",
     body: "Startup Launch. Product Update. Lead Gen. B2B Outreach. One click generates a full 30-day plan across every channel you want.",
+    icon: BookOpen,
   },
   {
     n: "03",
     title: "Sit back",
     body: "ComfyMart writes, schedules, posts, and reports. Approve in one tap or let it run. Weekly plain-English summaries land in your inbox.",
+    icon: Armchair,
   },
 ];
 
@@ -34,20 +44,28 @@ export default function HowItWorks() {
         </div>
 
         <ol className="mt-16 grid gap-6 md:grid-cols-3">
-          {steps.map((s) => (
-            <li
-              key={s.n}
-              className="relative rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] p-6 card-shadow"
-            >
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-accent)] text-sm font-semibold text-white">
-                {s.n}
-              </span>
-              <h3 className="mt-5 text-xl font-semibold">{s.title}</h3>
-              <p className="mt-2 text-[var(--color-muted-foreground)]">
-                {s.body}
-              </p>
-            </li>
-          ))}
+          {steps.map((s) => {
+            const Icon = s.icon;
+            return (
+              <li
+                key={s.n}
+                className="group relative rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] p-6 card-shadow transition hover:-translate-y-1 hover:border-[var(--color-primary)]/30"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-accent)] text-white transition group-hover:scale-105">
+                    <Icon size={20} />
+                  </span>
+                  <span className="text-sm font-semibold text-[var(--color-muted-foreground)]">
+                    {s.n}
+                  </span>
+                </div>
+                <h3 className="mt-5 text-xl font-semibold">{s.title}</h3>
+                <p className="mt-2 text-[var(--color-muted-foreground)]">
+                  {s.body}
+                </p>
+              </li>
+            );
+          })}
         </ol>
       </div>
     </section>

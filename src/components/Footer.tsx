@@ -11,12 +11,15 @@ export default function Footer() {
             © {new Date().getFullYear()} ComfyMart. Built by Comfybear.
           </span>
         </div>
-        <div className="flex items-center gap-6">
+        <div className="flex flex-wrap items-center justify-center gap-6">
           <a href="#how" className="hover:text-[var(--color-foreground)]">
             How it works
           </a>
           <a href="#features" className="hover:text-[var(--color-foreground)]">
             Features
+          </a>
+          <a href="#faq" className="hover:text-[var(--color-foreground)]">
+            FAQ
           </a>
           <a href="#waitlist" className="hover:text-[var(--color-foreground)]">
             Waitlist
