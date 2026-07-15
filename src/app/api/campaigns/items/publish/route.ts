@@ -7,16 +7,16 @@ import { suggestSendAt } from "@/lib/publish/optimal-time";
 import {
   publishEmailItem,
   publishSocialItem,
-  publishInternalItem,
+  publishDocumentItem,
 } from "@/lib/publish/channels";
 import { cleanSocialCopy } from "@/lib/publish/copy";
 import {
   mediaFromMetadata,
-  resolveProjectMediaUrls,
+  resolveShareMedia,
 } from "@/lib/publish/media";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 type Mode = "now" | "schedule";
 
@@ -99,14 +99,25 @@ export async function POST(request: Request) {
       );
     }
 
-    // Cache OG media per project website for this request
+    // Cache share media per project for this request (AI once, then OG fallback)
     const mediaCache = new Map<string, string[]>();
-    async function mediaFor(websiteUrl: string | null, metadata: unknown) {
+    async function mediaFor(
+      websiteUrl: string | null,
+      projectName: string,
+      metadata: unknown,
+    ) {
       const fromMeta = mediaFromMetadata(metadata);
       if (fromMeta.length) return fromMeta;
-      const key = websiteUrl ?? "";
+      const key = `${projectName}|${websiteUrl ?? ""}`;
       if (!mediaCache.has(key)) {
-        mediaCache.set(key, await resolveProjectMediaUrls(websiteUrl));
+        mediaCache.set(
+          key,
+          await resolveShareMedia({
+            websiteUrl,
+            projectName,
+            preferAi: true,
+          }),
+        );
       }
       return mediaCache.get(key) ?? [];
     }
@@ -118,6 +129,8 @@ export async function POST(request: Request) {
       detail?: string;
       error?: string;
       scheduledFor?: string;
+      markdown?: string;
+      filename?: string;
     }> = [];
 
     for (const row of rows) {
@@ -127,7 +140,11 @@ export async function POST(request: Request) {
         channel: item.channel,
       });
       const platforms = resolvePlatforms(item.metadata);
-      const mediaUrls = await mediaFor(row.websiteUrl, item.metadata);
+      const mediaUrls = await mediaFor(
+        row.websiteUrl,
+        row.projectName,
+        item.metadata,
+      );
       const socialBody = cleanSocialCopy(item.body);
 
       if (mode === "schedule" && when.getTime() > Date.now() + 60_000) {
@@ -196,12 +213,15 @@ export async function POST(request: Request) {
         continue;
       }
 
-      let outcome;
+      let outcome: Awaited<ReturnType<typeof publishEmailItem>> & {
+        markdown?: string;
+        filename?: string;
+      };
       if (item.channel === "email") {
         if (!toEmail) {
           outcome = {
-            ok: false as const,
-            mode: "live" as const,
+            ok: false,
+            mode: "live",
             error: "No email on your account to send to.",
           };
         } else {
@@ -218,9 +238,12 @@ export async function POST(request: Request) {
           mediaUrls,
         });
       } else {
-        outcome = await publishInternalItem({
+        outcome = publishDocumentItem({
           channel: item.channel,
           title: item.title,
+          body: item.body,
+          projectName: row.projectName,
+          websiteUrl: row.websiteUrl,
         });
       }
 
@@ -256,6 +279,9 @@ export async function POST(request: Request) {
               publishMode: outcome.mode,
               publishDetail: outcome.detail,
               mediaUrls,
+              ...(outcome.filename
+                ? { documentFilename: outcome.filename }
+                : {}),
             }),
             updatedAt: new Date(),
           })
@@ -267,6 +293,9 @@ export async function POST(request: Request) {
         status: "published",
         mode: outcome.mode,
         detail: outcome.detail,
+        ...(outcome.markdown && outcome.filename
+          ? { markdown: outcome.markdown, filename: outcome.filename }
+          : {}),
       });
     }
 

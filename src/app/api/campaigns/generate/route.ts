@@ -7,7 +7,7 @@ import { generateCampaignPlan } from "@/lib/ai/campaign";
 import { eq } from "drizzle-orm";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -102,8 +102,13 @@ export async function POST(request: Request) {
     brief,
   });
 
-  const { resolveProjectMediaUrls } = await import("@/lib/publish/media");
-  const mediaUrls = await resolveProjectMediaUrls(project.websiteUrl);
+  const { resolveShareMedia } = await import("@/lib/publish/media");
+  const mediaUrls = await resolveShareMedia({
+    websiteUrl: project.websiteUrl,
+    projectName: project.name,
+    hook: brief?.usp ?? brief?.summary ?? project.description,
+    preferAi: true,
+  });
 
   try {
     await withUser(userId, async (tx) => {
