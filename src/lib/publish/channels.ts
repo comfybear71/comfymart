@@ -82,20 +82,40 @@ export async function publishSocialItem(input: {
   body: string;
   platforms?: string[];
   scheduleDate?: Date;
+  mediaUrls?: string[];
 }): Promise<PublishResult> {
-  const apiKey = process.env.AYRSHARE_API_KEY;
-  const platforms = (
+  const apiKey = process.env.AYRSHARE_API_KEY?.trim();
+  let platforms = (
     input.platforms ??
     process.env.AYRSHARE_PLATFORMS?.split(",").map((p) => p.trim()) ??
     ["linkedin"]
-  ).filter(Boolean);
+  )
+    .map((p) => p.toLowerCase())
+    .filter(Boolean);
+
+  // Instagram (and similar) require media — drop them for text-only posts
+  // so LinkedIn/Facebook still succeed.
+  const mediaUrls = (input.mediaUrls ?? []).filter(Boolean);
+  if (mediaUrls.length === 0) {
+    const needsMedia = new Set(["instagram", "tiktok", "pinterest"]);
+    platforms = platforms.filter((p) => !needsMedia.has(p));
+  }
+
+  if (platforms.length === 0) {
+    return {
+      ok: false,
+      mode: "live",
+      error:
+        "No publishable platforms left (Instagram needs an image). Set AYRSHARE_PLATFORMS=linkedin,facebook for text posts.",
+    };
+  }
 
   if (!apiKey) {
     return {
       ok: true,
       mode: "simulated",
       detail:
-        "AYRSHARE_API_KEY not set — queued as published (dry-run). Add the key to go live.",
+        "AYRSHARE_API_KEY not set — dry-run only. Add the key and restart the server for live posts.",
     };
   }
 
@@ -104,6 +124,7 @@ export async function publishSocialItem(input: {
       post: input.body.slice(0, 2800),
       platforms,
     };
+    if (mediaUrls.length) payload.mediaUrls = mediaUrls;
     if (input.scheduleDate && input.scheduleDate.getTime() > Date.now() + 60_000) {
       payload.scheduleDate = input.scheduleDate.toISOString();
     }
@@ -115,7 +136,6 @@ export async function publishSocialItem(input: {
     if (process.env.AYRSHARE_PROFILE_KEY) {
       headers["Profile-Key"] = process.env.AYRSHARE_PROFILE_KEY;
     }
-    // X BYO keys (required by Ayrshare when platforms includes twitter)
     const twitterKey =
       process.env.AYRSHARE_TWITTER_API_KEY ??
       process.env.X_CONSUMER_KEY ??
@@ -139,17 +159,19 @@ export async function publishSocialItem(input: {
       status?: string;
       message?: string;
       errors?: unknown;
+      posts?: unknown;
     };
 
-    if (!res.ok) {
-      return {
-        ok: false,
-        mode: "live",
-        error:
-          json.message ||
-          (typeof json.errors === "string" ? json.errors : null) ||
-          `Ayrshare HTTP ${res.status}`,
-      };
+    if (!res.ok || json.status === "error") {
+      const errMsg =
+        json.message ||
+        (typeof json.errors === "string"
+          ? json.errors
+          : json.errors
+            ? JSON.stringify(json.errors)
+            : null) ||
+        `Ayrshare HTTP ${res.status}`;
+      return { ok: false, mode: "live", error: errMsg };
     }
 
     return {
@@ -158,7 +180,7 @@ export async function publishSocialItem(input: {
       externalId: json.id,
       detail: payload.scheduleDate
         ? `Scheduled on ${platforms.join(", ")}`
-        : `Posted to ${platforms.join(", ")}`,
+        : `Posted to ${platforms.join(", ")} via Ayrshare`,
     };
   } catch (err) {
     return {
