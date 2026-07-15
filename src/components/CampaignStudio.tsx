@@ -13,6 +13,7 @@ export type StudioItem = {
   scheduledFor?: string | Date | null;
   publishedAt?: string | Date | null;
   publishError?: string | null;
+  publishDetail?: string | null;
 };
 
 const statusLabel: Record<string, string> = {
@@ -61,7 +62,13 @@ async function publishItems(itemIds: string[], mode: "now" | "schedule") {
     published?: number;
     scheduled?: number;
     failed?: number;
-    results?: Array<{ id: string; status: string; detail?: string; error?: string }>;
+    results?: Array<{
+      id: string;
+      status: string;
+      detail?: string;
+      error?: string;
+      mode?: string;
+    }>;
   };
   if (!res.ok) throw new Error(data.error ?? "Publish failed");
   return data;
@@ -147,6 +154,7 @@ export default function CampaignStudio({
             ...item,
             status: r.status,
             publishError: r.error ?? null,
+            publishDetail: r.detail ?? null,
           };
         }),
       );
@@ -156,7 +164,12 @@ export default function CampaignStudio({
       } else if (mode === "schedule") {
         toast.success(`${data.scheduled ?? ids.length} scheduled`);
       } else {
-        toast.success(`${data.published ?? ids.length} published`);
+        const tip = data.results?.find((r) => r.detail)?.detail;
+        toast.success(
+          tip
+            ? `${data.published ?? ids.length} published — ${tip}`
+            : `${data.published ?? ids.length} published`,
+        );
       }
     } catch (err) {
       setItems(previous);
@@ -275,6 +288,11 @@ export default function CampaignStudio({
                     {item.publishError && (
                       <p className="mt-1 text-xs text-red-600">
                         {item.publishError}
+                      </p>
+                    )}
+                    {item.publishDetail && !item.publishError && (
+                      <p className="mt-1 text-xs text-[var(--color-muted-foreground)]">
+                        {item.publishDetail}
                       </p>
                     )}
                   </div>
