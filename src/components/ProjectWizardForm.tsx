@@ -99,8 +99,8 @@ export default function ProjectWizardForm() {
       </button>
 
       <p className="text-center text-xs text-[var(--color-muted-foreground)]">
-        We&apos;ll generate a brand brief from your answers. Campaign generation
-        comes in Phase 2.
+        We&apos;ll generate a brand brief, then you can create campaigns and
+        follow the channel setup checklist on the project page.
       </p>
     </form>
   );

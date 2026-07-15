@@ -1,4 +1,31 @@
+import { generateShareImage } from "@/lib/ai/imagine";
+
 /** Resolve publicly reachable image URLs for social posts (Instagram etc.). */
+
+export type ResolveShareMediaInput = {
+  websiteUrl?: string | null;
+  projectName: string;
+  /** Brand USP / summary for Grok Imagine prompt. */
+  hook?: string | null;
+  /** Prefer AI-generated creatives when XAI_API_KEY is set. */
+  preferAi?: boolean;
+};
+
+/**
+ * Prefer Grok Imagine (durable Blob URL when configured), then site OG image.
+ */
+export async function resolveShareMedia(
+  input: ResolveShareMediaInput,
+): Promise<string[]> {
+  if (input.preferAi !== false) {
+    const aiUrl = await generateShareImage({
+      projectName: input.projectName,
+      hook: input.hook,
+    });
+    if (aiUrl) return [aiUrl];
+  }
+  return resolveProjectMediaUrls(input.websiteUrl);
+}
 
 export async function resolveProjectMediaUrls(
   websiteUrl?: string | null,

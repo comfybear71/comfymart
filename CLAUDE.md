@@ -32,11 +32,11 @@ Product #12 in the Comfybear family. The first 11 projects are the initial tenan
 | ------------------- | ------------------------------------------ | ------- |
 | Database            | Neon Postgres (via Vercel integration)     | ✅ wired |
 | ORM / migrations    | Drizzle ORM + Drizzle Kit                  | ✅ wired |
-| Auth                | Auth.js v5 (Drizzle adapter)               | schema only (runtime lands in Option B) |
-| Storage             | Vercel Blob                                | Phase 1-C |
-| LLM / content       | Anthropic Claude (`claude-sonnet-4-6` default; `claude-opus-4-7` for heavy reasoning) | Phase 1-C brief (needs `ANTHROPIC_API_KEY`) / Phase 2 campaigns |
-| Social posting      | Ayrshare (unified)                         | Phase 3 |
-| Transactional email | Resend                                     | ✅ Phase 1-C (magic links) |
+| Auth                | Auth.js v5 (Drizzle adapter)               | ✅ Google + Resend magic link |
+| Storage             | Vercel Blob                                | ✅ Grok share images |
+| LLM / content       | Anthropic Claude + xAI Grok Imagine        | ✅ brief, campaigns, social media |
+| Social posting      | Ayrshare (unified)                         | ✅ Phase 3 (single profile) |
+| Transactional email | Resend                                     | ✅ magic links + campaign email |
 | SMS (later)         | Twilio                                     | Phase 4+ |
 | Video (later)       | Runway / Kling AI                          | Phase 4+ |
 
@@ -58,9 +58,15 @@ Product #12 in the Comfybear family. The first 11 projects are the initial tenan
 2. **Phase 1-A** _(shipped, v0.2.0)_ — Neon Postgres, Drizzle schema, RLS on tenant tables, `withUser()` helper.
 3. **Phase 1-B** _(shipped)_ — Auth.js v5 Google OAuth, `/login`, `/dashboard` empty state, session-aware Nav.
 4. **Phase 1-C** _(shipped)_ — Magic-link login (Resend), "Plug New Project" wizard, AI brief analyzer.
-5. **Phase 2** _(shipped on branch)_ — Campaign Generator, Content Studio, human-approval queue.
-6. **Phase 3** _(in progress)_ — Social scheduler (Ayrshare), email sequences (Resend), optimal-time AI.
-7. **Phase 4+** — Analytics, agentic loops, white-label / agency mode, billing (Stripe).
+5. **Phase 2** _(shipped)_ — Campaign Generator, Content Studio, human-approval queue.
+6. **Phase 3** _(shipped core)_ — Ayrshare social (+ Grok media), Resend email, schedule heuristics, SEO/Content Markdown export, per-network channel setup checklist on project page.
+7. **Phase 4+** — **CMS sync** (push approved SEO/Content to customer site / headless CMS / Git), email sequences, Ayrshare multi-profile per tenant, analytics, agentic loops, white-label / agency mode, billing (Stripe), video.
+
+### Phase 3 vs CMS sync (do not block)
+
+- Phase 3 is **done** when: human-approved social posts with media go out via Ayrshare, email works via Resend, and SEO/Content can be **downloaded as Markdown** with setup instructions for WordPress/Shopify/custom.
+- **CMS sync is Phase 4+.** Do not delay social/setup polish waiting for auto-push to Next.js/WordPress.
+- Until sync exists: WordPress/Shopify users paste `.md`; Next.js owners (e.g. ShadeMate) add `/guides` pages by hand (or with an agent). Treat sync like channel setup when built: destination URL, auth, “done when article is live.”
 
 ## Auth pattern
 
@@ -128,12 +134,15 @@ src/
 | `ANTHROPIC_API_KEY` | Anthropic console | AI brief + campaign generator |
 | `AYRSHARE_API_KEY` | Ayrshare dashboard | Live social publish (dry-run without it) |
 | `AYRSHARE_PROFILE_KEY` | Ayrshare (optional) | Multi-profile / business plans |
-| `AYRSHARE_PLATFORMS` | e.g. `linkedin,facebook` | Default social targets |
+| `AYRSHARE_PLATFORMS` | e.g. `linkedin,facebook,instagram` | Default social targets |
+| `XAI_API_KEY` | xAI console | Grok Imagine share images |
+| `XAI_IMAGE_MODEL` | e.g. `grok-imagine-image-quality` | Image model (default `grok-imagine-image`) |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob | Durable image URLs for scheduled posts |
 
 ## How to continue
 
-1. Confirm: `/login` has Google + magic link; `/dashboard/projects/new` creates org+project+brief.
-2. Phase 2 scope: Campaign Generator, Content Studio, human-approval queue.
-3. The wizard creates orgs via the `create_organization()` RPC (see Phase 1-A RLS migration).
+1. On each project page: complete **Social channel setup** (tick networks after linking in Ayrshare).
+2. Keep Free/Premium as one shared Ayrshare profile for Comfybear brands until Launch+ multi-profile.
+3. Phase 3 caveat is closed: social + Markdown download ship without CMS sync. Phase 4 starts with CMS sync + email sequences + per-org `Profile-Key` + video.
 4. All tenant reads/writes MUST go through `withUser(userId, fn)` in `src/lib/db/client.ts`.
 5. When adding new tenant tables: enable RLS + FORCE, add policies using `is_org_member()`.

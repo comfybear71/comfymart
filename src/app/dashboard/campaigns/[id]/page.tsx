@@ -25,6 +25,7 @@ export default async function CampaignStudioPage({
         playbook: campaigns.playbook,
         projectId: campaigns.projectId,
         projectName: projects.name,
+        websiteUrl: projects.websiteUrl,
       })
       .from(campaigns)
       .innerJoin(projects, eq(projects.id, campaigns.projectId))
@@ -73,7 +74,12 @@ export default async function CampaignStudioPage({
         </h1>
       </div>
 
-      <CampaignStudio initialItems={items} />
+      <CampaignStudio
+        initialItems={items}
+        projectId={campaign.projectId}
+        projectName={campaign.projectName}
+        websiteUrl={campaign.websiteUrl}
+      />
     </div>
   );
 }

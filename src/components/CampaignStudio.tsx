@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { buildDocumentMarkdown } from "@/lib/publish/document";
 
 export type StudioItem = {
   id: string;
@@ -14,6 +15,8 @@ export type StudioItem = {
   publishedAt?: string | Date | null;
   publishError?: string | null;
   publishDetail?: string | null;
+  projectName?: string | null;
+  websiteUrl?: string | null;
 };
 
 const statusLabel: Record<string, string> = {
@@ -68,16 +71,34 @@ async function publishItems(itemIds: string[], mode: "now" | "schedule") {
       detail?: string;
       error?: string;
       mode?: string;
+      markdown?: string;
+      filename?: string;
     }>;
   };
   if (!res.ok) throw new Error(data.error ?? "Publish failed");
   return data;
 }
 
+function downloadMarkdown(filename: string, markdown: string) {
+  const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function CampaignStudio({
   initialItems,
+  projectId,
+  projectName,
+  websiteUrl,
 }: {
   initialItems: StudioItem[];
+  projectId?: string;
+  projectName?: string;
+  websiteUrl?: string | null;
 }) {
   const [items, setItems] = useState(initialItems);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
@@ -164,11 +185,19 @@ export default function CampaignStudio({
       } else if (mode === "schedule") {
         toast.success(`${data.scheduled ?? ids.length} scheduled`);
       } else {
+        const docs = (data.results ?? []).filter((r) => r.markdown && r.filename);
+        for (const doc of docs) {
+          if (doc.markdown && doc.filename) {
+            downloadMarkdown(doc.filename, doc.markdown);
+          }
+        }
         const tip = data.results?.find((r) => r.detail)?.detail;
         toast.success(
-          tip
-            ? `${data.published ?? ids.length} published — ${tip}`
-            : `${data.published ?? ids.length} published`,
+          docs.length
+            ? `${data.published ?? ids.length} published — Markdown downloaded for your site`
+            : tip
+              ? `${data.published ?? ids.length} published — ${tip}`
+              : `${data.published ?? ids.length} published`,
         );
       }
     } catch (err) {
@@ -239,11 +268,20 @@ export default function CampaignStudio({
       </div>
 
       <p className="mb-6 rounded-xl border border-dashed border-[var(--color-border)] bg-[var(--color-muted)]/40 px-4 py-3 text-xs text-[var(--color-muted-foreground)]">
-        Email sends to your signed-in address via Resend. Social posts use your
-        project&apos;s site image (OG) so Instagram/Facebook/LinkedIn (and X when
-        linked) can go out together. Set{" "}
-        <code className="text-[0.7rem]">AYRSHARE_PLATFORMS</code> e.g.{" "}
-        <code className="text-[0.7rem]">linkedin,facebook,instagram</code>.
+        Email → your signed-in address (Resend). Social → Ayrshare networks in{" "}
+        <code className="text-[0.7rem]">AYRSHARE_PLATFORMS</code> with Grok/OG
+        media. SEO &amp; Content → Markdown download — then follow{" "}
+        {projectId ? (
+          <a
+            href={`/dashboard/projects/${projectId}#seo-publish`}
+            className="text-[var(--color-primary)] hover:underline"
+          >
+            Put SEO on your website
+          </a>
+        ) : (
+          "Put SEO on your website"
+        )}{" "}
+        on the project page (channel checklist is there too).
       </p>
 
       {items.length === 0 ? (
@@ -339,6 +377,30 @@ export default function CampaignStudio({
                         </button>
                       </>
                     )}
+                    {(item.channel === "seo" || item.channel === "content") &&
+                      (item.status === "published" ||
+                        item.status === "approved" ||
+                        item.status === "failed") && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const doc = buildDocumentMarkdown({
+                              channel: item.channel,
+                              title: item.title,
+                              body: item.body,
+                              projectName:
+                                item.projectName ?? projectName ?? undefined,
+                              websiteUrl:
+                                item.websiteUrl ?? websiteUrl ?? undefined,
+                            });
+                            downloadMarkdown(doc.filename, doc.markdown);
+                            toast.success(`Downloaded ${doc.filename}`);
+                          }}
+                          className="rounded-full border border-[var(--color-border)] px-4 py-1.5 text-xs font-medium transition hover:bg-[var(--color-muted)]"
+                        >
+                          Download .md
+                        </button>
+                      )}
                   </div>
                 </div>
                 <pre className="mt-4 whitespace-pre-wrap font-sans text-sm leading-relaxed text-[var(--color-muted-foreground)]">

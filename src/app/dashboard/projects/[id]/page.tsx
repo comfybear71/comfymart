@@ -6,6 +6,8 @@ import { projects, campaigns } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
 import type { BrandBrief } from "@/lib/ai/brief";
 import GenerateCampaignButton from "@/components/GenerateCampaignButton";
+import ChannelSetupGuide from "@/components/ChannelSetupGuide";
+import SeoPublishGuide from "@/components/SeoPublishGuide";
 
 export default async function ProjectPage({
   params,
@@ -106,6 +108,18 @@ export default async function ProjectPage({
           </ul>
         </section>
       )}
+
+      <ChannelSetupGuide
+        projectId={project.id}
+        projectName={project.name}
+        websiteUrl={project.websiteUrl}
+        brief={brief}
+      />
+
+      <SeoPublishGuide
+        projectName={project.name}
+        websiteUrl={project.websiteUrl}
+      />
 
       {brief ? (
         <section className="rounded-3xl border border-[var(--color-border)] bg-[var(--color-card)] p-6 md:p-10 card-shadow">

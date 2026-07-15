@@ -191,13 +191,28 @@ export async function publishSocialItem(input: {
   }
 }
 
-export async function publishInternalItem(input: {
+import { buildDocumentMarkdown } from "@/lib/publish/document";
+
+export type DocumentPublishResult = PublishResult & {
+  markdown?: string;
+  filename?: string;
+};
+
+/** SEO / Content: package as Markdown for the site CMS (no auto-push yet). */
+export function publishDocumentItem(input: {
   channel: string;
   title: string;
-}): Promise<PublishResult> {
+  body: string;
+  projectName?: string;
+  websiteUrl?: string | null;
+}): DocumentPublishResult {
+  const { markdown, filename } = buildDocumentMarkdown(input);
+
   return {
     ok: true,
     mode: "internal",
-    detail: `${input.channel} “${input.title}” marked ready (no external publisher in Phase 3).`,
+    detail: `${input.channel} packaged as ${filename} — download and publish to your site CMS.`,
+    markdown,
+    filename,
   };
 }
